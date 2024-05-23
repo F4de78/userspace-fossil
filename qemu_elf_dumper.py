@@ -41,7 +41,7 @@ def ctrl_c_handler(sig, frame):
     # Create machine ELF NOTE
         # Dump registers
     gdbmi.write('help') # Workaround
-    gdb_reg_reply = gdbmi.write('info all-registers')
+    gdb_reg_reply = gdbmi.write('info all-registers') # get all registers
     registers = extract_registers_values(gdb_reg_reply)
 
         # Get memory regions
@@ -75,7 +75,7 @@ def ctrl_c_handler(sig, frame):
     # Write headers
     dump_fd.write(elf_h + program_h + machine_note)
 
-    def call_pmemsave(qemu_monito, r_start, r_size):
+    def call_pmemsave(qemu_monitor, r_start, r_size):
         qemu_monitor.cmd("pmemsave", {"val": r_start, "size": r_size, "filename": path + "dump_fifo"})
 
     # Dump memory regions
@@ -247,16 +247,13 @@ def make_program_header(elf_h, notes, mem_regions):
 
 def extract_registers_values(gdb_message):
     regs = {}
-    # expr = re.compile(r"(?P<reg>\w+)\s+(?P<value>0x[0-9abcdef]+)\s*.+\\n")
-    expr = re.compile(r"(?P<reg>\w+)\s+(?P<value>0x[0-9a-fA-F]+)\s+\[.+\]")
-
-
+    expr = re.compile(r"(?P<reg>\w+)\s+(?P<value>0x[0-9a-fA-F]+).+")
     for msg in gdb_message:
 
         if msg["message"] == "done":
             continue
 
-        parsed_payload = expr.fullmatch(msg["payload"])
+        parsed_payload = expr.fullmatch(msg["payload"].strip())
         if parsed_payload:
             regs[parsed_payload.group("reg")] = int(parsed_payload.group("value"), 16)
 
