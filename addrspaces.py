@@ -216,7 +216,7 @@ class ELFDump:
                         continue
 
                     # Suppose only one deadcode note
-                    self.machine_data = json.loads(note["n_desc"].rstrip("\x00"))
+                    self.machine_data = json.loads(note["n_desc"][:-4]) #fix: removes trailing \x00
                     self.machine_data["Endianness"] = "little" if elf_file.header["e_ident"].EI_DATA == "ELFDATA2LSB" else "big"
                     self.machine_data["Architecture"] = "_".join(elf_file.header["e_machine"].split("_")[1:])
             else:
@@ -929,8 +929,12 @@ class AddressTranslator:
                 # Compact them
                 fused_intervals = []
                 prev_begin = prev_end = prev_offset = -1
+                begin = 0
                 for interval in intervals[pmask]:
-                    begin, end, phy = interval
+                    begin = interval[0]
+                    end = interval[1]
+                    phy = interval[2]
+                    
 
                     offset = self.phy.p2o[phy]
                     if offset == -1:
@@ -943,7 +947,7 @@ class AddressTranslator:
                         prev_begin = begin
                         prev_end = end
                         prev_offset = offset
-
+                
                 if prev_begin != begin:
                     fused_intervals.append([prev_begin, prev_end, prev_offset])
                 else:
