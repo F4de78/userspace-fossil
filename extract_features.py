@@ -60,17 +60,21 @@ def main():
     # Produce a kernel VAS only ELF file
     print("Export kernel VAS ELF...")
     virtspace.export_virtual_memory_elf(str(dest_path) + "/extracted_kernel.elf", True, False)
-
+    ghidra_path = os.getenv("GHIDRA_PATH")
+    if not ghidra_path:
+        print("Error: GHIDRA_PATH not set!")
+        return(1)
     # Collect addresses from static analysis
     print("Start static analysis...")
     out_filename = f"{str(dest_path)}.json"
     arch = phy_elf.get_machine_data()["Architecture"]
     processor = f"X86:LE:{virtspace.wordsize * 8}:default -cspec gcc" if arch == "X86" else f"AARCH64:LE:{virtspace.wordsize * 8}:v8A -cspec default" # Support only X86 and AARCH64 
-    ghidra_cmd = "/root/ghidra/support/analyzeHeadless" \
-                 f" /tmp/ ghidra_project_{random.randint(0, 1000000)}" \
-                 f" -import {str(dest_path)}/extracted_kernel.elf" \
-                 f" -processor {processor}" \
-                 f" -scriptPath /root/ghidra -postScript export_xrefs.py {out_filename}"
+    ghidra_cmd = os.path.join(ghidra_path, 'support/analyzeHeadless') \
+                 + f" /tmp/ ghidra_project_{random.randint(0, 1000000)}" \
+                 + f" -import {str(dest_path)}/extracted_kernel.elf" \
+                 + f" -processor {processor}" \
+                 + f" -scriptPath {os.path.join(os.path.dirname(__file__),'ghidra')}" \
+                 + f" -postScript export_xrefs.py {out_filename}"
     try:
         ret = subprocess_check_output_strip(ghidra_cmd)
         with open(out_filename, "r") as output:
