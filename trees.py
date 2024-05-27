@@ -111,8 +111,8 @@ def non_unique_in_first(arrays):
     first, *others = arrays
     mask = np.concatenate([[False], first[:-1] == first[1:], [False]])
     non_unique = mask[:-1] | mask[1:]
-    first = first[non_unique]
-    return get_boundaries(first), itertools.chain([first], (a[non_unique] for a in others))
+    first = first[non_unique[0]]
+    return get_boundaries(first), itertools.chain([first], (a[non_unique[0]] for a in others))
 
 
 def tree_distance_threshold(o0, o1, o2t):
@@ -143,7 +143,18 @@ def one_higher(trees, ptrs, o2t):
 
 
 def len_two_chains(offsets, pointer_set):
-    res = da.from_array(offsets, 1).map_blocks(get_len2_chains, pointer_set).compute()
+    # res = da.from_array(offsets, '1').map_blocks(get_len2_chains, pointer_set,new_axis=1).compute()
+    offsets_dask_array:da.Array = \
+        da.from_array(offsets, '1')
+    
+    # Compute and get a 'len two chain' for each offset
+    res = \
+        da.map_blocks(
+            get_len2_chains, 
+            offsets_dask_array, 
+            pointer_set, 
+            new_axis=1)\
+        .compute()
     res = res[np.argsort(res[:, 1], kind='mergesort')]
     return sort_using_first(res.T, 'stable')
 

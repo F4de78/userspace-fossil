@@ -216,7 +216,7 @@ class ELFDump:
                         continue
 
                     # Suppose only one deadcode note
-                    self.machine_data = json.loads(note["n_desc"][:-4]) #fix: removes trailing \x00
+                    self.machine_data = json.loads(note["n_desc"].strip(b'\x00')) #fix: removes trailing \x00
                     self.machine_data["Endianness"] = "little" if elf_file.header["e_ident"].EI_DATA == "ELFDATA2LSB" else "big"
                     self.machine_data["Architecture"] = "_".join(elf_file.header["e_machine"].split("_")[1:])
             else:
