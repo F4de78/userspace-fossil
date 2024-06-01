@@ -75,6 +75,7 @@ def main():
                  + f" -processor {processor}" \
                  + f" -scriptPath {os.path.join(os.path.dirname(__file__),'ghidra')}" \
                  + f" -postScript export_xrefs.py {out_filename}"
+    functions = []
     try:
         ret = subprocess_check_output_strip(ghidra_cmd)
         with open(out_filename, "r") as output:
