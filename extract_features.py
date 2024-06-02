@@ -68,7 +68,8 @@ def main():
     print("Start static analysis...")
     out_filename = f"{str(dest_path)}.json"
     arch = phy_elf.get_machine_data()["Architecture"]
-    processor = f"X86:LE:{virtspace.wordsize * 8}:default -cspec gcc" if arch == "X86" else f"AARCH64:LE:{virtspace.wordsize * 8}:v8A -cspec default" # Support only X86 and AARCH64 
+    print (f"Architecture: {arch}")
+    processor = f"x86:LE:{virtspace.wordsize * 8}:default -cspec gcc" if "X86" in arch or "386" in arch else f"AARCH64:LE:{virtspace.wordsize * 8}:v8A -cspec default" # Support only X86 and AARCH64 
     ghidra_cmd = os.path.join(ghidra_path, 'support/analyzeHeadless') \
                  + f" /tmp/ ghidra_project_{random.randint(0, 1000000)}" \
                  + f" -import {str(dest_path)}/extracted_kernel.elf" \
