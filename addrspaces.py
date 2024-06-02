@@ -3,7 +3,7 @@ import numpy as np
 
 from bitarray import bitarray
 from mappings import (
-    IntervalsMappingOffsets,
+    IMOffsets,
     IntervalsMappingOverlapping,
     IntervalsMappingData
 )
@@ -29,7 +29,7 @@ class AddressTranslator:
     elf_dump: ELFDump
     word_type: type
     word_format: np.dtype
-    virtual_to_offset: IntervalsMappingOffsets
+    virtual_to_offset: IMOffsets
     offset_to_virtual: IntervalsMappingOverlapping
     permissions_mask: IntervalsMappingData
     total_levels: int
@@ -238,7 +238,7 @@ class AddressTranslator:
         intervals_offest_to_virtual.sort()
 
         # Fill resolution objects
-        self.virtual_to_offset = IntervalsMappingOffsets(*list(zip(*fused_intervals_virtual_to_offset)))
+        self.virtual_to_offset = IMOffsets(*list(zip(*fused_intervals_virtual_to_offset)))
         self.offset_to_virtual = IntervalsMappingOverlapping(intervals_offest_to_virtual)
         self.permissions_mask  = IntervalsMappingData(*list(zip(*fused_intervals_permissions)))
 

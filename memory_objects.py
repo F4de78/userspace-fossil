@@ -11,7 +11,7 @@ from bitarray import bitarray
 from collections import Counter
 from elftools.elf.elffile import ELFFile
 from elftools.elf.segments import NoteSegment
-from mappings import IntervalsMappingOffsets, IntervalsMappingSimple
+from mappings import IMOffsets, IntervalsMappingSimple
 from numpy.typing import NDArray
 from io import BufferedReader
 from statistics import mode
@@ -34,7 +34,7 @@ class MemoryObject:
     sorted_strings: list[int]
     strings_set: set[int]
     pointer_size: int
-    virtual_to_offset: IntervalsMappingOffsets
+    virtual_to_offset: IMOffsets
     bitmap: bitarray
     uint_conversion_function: Callable[[int], int]
     dtype: type
@@ -48,7 +48,7 @@ class MemoryObject:
         cls, 
         pointers: dict[int,int], 
         pointer_size: int, 
-        virtual_to_offset: IntervalsMappingOffsets, 
+        virtual_to_offset: IMOffsets, 
         bitmap: bitarray, 
         strings: dict[int,str], 
         external_references: set[int], 
@@ -730,8 +730,8 @@ class PointersArray(MemoryObject):
 class ELFDump:
     filename:str
     machine_data:dict[str, Any]
-    physical_to_offset: IntervalsMappingOffsets               # Physical to RAM (ELF offset)
-    offset_to_physical: IntervalsMappingOffsets               # RAM (ELF offset) to Physical
+    physical_to_offset: IMOffsets               # Physical to RAM (ELF offset)
+    offset_to_physical: IMOffsets               # RAM (ELF offset) to Physical
     physical_to_memory_mapped_device: IntervalsMappingSimple  # Physical to Memory Mapped Devices (ELF offset)
     elf_buffer: NDArray[np.byte]
 
@@ -794,8 +794,8 @@ class ELFDump:
         x = zip(x)
         x = list(x)
 
-        self.physical_to_offset = IntervalsMappingOffsets(*list(zip(*sorted(physical_to_offset_list))))
-        self.offset_to_physical = IntervalsMappingOffsets(*list(zip(*sorted(offset_to_physical_list))))
+        self.physical_to_offset = IMOffsets(*list(zip(*sorted(physical_to_offset_list))))
+        self.offset_to_physical = IMOffsets(*list(zip(*sorted(offset_to_physical_list))))
         self.physical_to_memory_mapped_device = IntervalsMappingSimple(*list(zip(*sorted(physical_to_memory_mapped_device_list))))
     
     def _compact_intervals_simple(self, intervals:list[tuple[int, int]]) -> list[tuple[int, int]]:

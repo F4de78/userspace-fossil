@@ -35,7 +35,7 @@ class IntervalsMappingSimple:
     def get_extremes(self) -> tuple[int, int]:
         return self.keys[0], self.values[-1]
 
-class IntervalsMappingOffsets:
+class IMOffsets:
     """
     Fast search in intervals 
     (begin), (end, associated offset)
