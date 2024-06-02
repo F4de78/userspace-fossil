@@ -8,8 +8,8 @@ import logging
 import os
 import subprocess
 
-from address_translators import get_virtual_space
-from address_translators import (
+from addrspaces import get_virtual_space
+from addrspaces import (
     RISCVSV32, 
     RISCVSV39, 
     AArch64Long, 
