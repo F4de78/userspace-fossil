@@ -6,7 +6,7 @@ import os
 import sys
 
 from binarytree import build as buildtree
-from cmd2.ansi import style, fg, bg
+from cmd2.ansi import style
 from cmd2.cmd2 import Cmd
 from cmd2.decorators import with_argparser, with_category
 from colorama import Back, Fore
@@ -129,9 +129,9 @@ class FossilShell(Cmd):
 \t\t\t\t\t |_|   \\___/ |___/|___/|_||_|\n\
                              \n\
                              "
-        Cmd.__init__(self, use_ipython=True)
+        Cmd.__init__(self)
         self.self_in_py = True
-        self.intro      = style(dinosaur, bold=True, bg=bg(Back.BLACK), fg=fg(Fore.WHITE))
+        # self.intro      = style(dinosaur, bold=True, bg=bg(Back.BLACK), fg=fg(Fore.WHITE))
         self.prompt     = 'fossil> '
 
         # Hide default settings
