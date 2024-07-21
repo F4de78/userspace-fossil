@@ -326,7 +326,9 @@ def dump_header(qmp_monitor:QEMUMonitorProtocol, gdb_controller:GdbController, i
         print('[Error] An error occured while trying to get memory regions from QMP')
         exit(11)
     memory_regions = split_memory_tree_data(memory_regions_raw['return'])
+    print(memory_regions)
     memory_regions_data = [(region['start'], region['name']) for region in memory_regions if region['type'] != 'ram']
+    print(memory_regions_data)
     machine_data = {
         'Architecture': architecture,
         'Uptime': uptime,
