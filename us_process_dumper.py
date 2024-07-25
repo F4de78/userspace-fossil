@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from qmp import QEMUMonitorProtocol
 from signal import signal, SIGINT
 import argparse
 from datetime import datetime
@@ -37,7 +36,7 @@ def dump_process(pid: int):
     # attach to running process
     resp = gdbmi.write(f"attach {pid}")
     architecture = resp[-1].get("payload").get("frame").get("arch")
-    resp = gdbmi.write(f"gcore {pid}.out")
+
     if 'x86-64' in architecture:
         architecture = 'x86_64'
     print(f"Architecture: {architecture}")
@@ -80,28 +79,19 @@ def dump_process(pid: int):
     # Write headers
     dump_fd.write(elf_h + program_h + machine_note)
 
-    def call_pmemsave(qemu_monitor, r_start, r_size):
-        qemu_monitor.cmd("pmemsave", {"val": r_start, "size": r_size, "filename": path + "dump_fifo"})
-
     # Dump memory regions
-    for region in mem_regions:
-        r_start, r_end, r_type, _ = region
 
-        if r_type != "ram":
-            continue
+    dump = gdbmi.write(f"gcore")
+    print(dump)
+    # append core.6881 to dump_fd
+    with open(f"core.{pid}", "rb") as f:
+        shutil.copyfileobj(f, dump_fd)
 
-        r_size = r_end - r_start + 1
-        th = threading.Thread(target=call_pmemsave, args=(qemu_monitor, r_start, r_size))
-        th.start()
-        fifo_fd = open(path + "dump_fifo", "rb")
-        shutil.copyfileobj(fifo_fd, dump_fd)
-        th.join()
-        fifo_fd.close()
+    #shutil.copyfileobj(f"core.{pid}", dump_fd)
+    
     dump_fd.close()
 
     # Unfreeze the machine and close monitors
-    qemu_monitor.cmd("cont", {})
-    qemu_monitor.close()
     gdbmi.exit()
     try:
         os.remove(path + "dump_fifo")
