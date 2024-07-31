@@ -21,19 +21,13 @@ data_keys = [
 
 def parse_arguments() -> dict:
     parser = argparse.ArgumentParser(description='You have to call QEMU with "-qmp tcp:HOST:PORT,server -s" options')
-    parser.add_argument("qmp", help="QEMU QMP channel (host:port)", type=str)
-    parser.add_argument("gdb", help="QEMU GDB channel (host:port)", type=str)
     parser.add_argument("path", help="Path for the output", type=str)
-    parser.add_argument("-c", help="Add custom values KEY_DICT:KEY:VALUE", nargs='+', default=[], metavar="KEY_DICT:KEY:VALUE")
-    parser.add_argument("-d", help="Docker mode. Host path for /data volume", type=str, default="", metavar="HOST_DATA_PATH")
+    parser.add_argument("pid", help="PID of the running process", type=int)
     args = parser.parse_args()
 
     return {
-        'qmp_service': args.qmp,
-        'gdb_service': args.gdb,
         'dump_path': args.path,
-        'custom_values': args.c,
-        'host_data_path': args.d
+        'gdb_service': args.pid
     }
 
 def get_qemu_qmp_monitor(qmp_service:dict) -> QEMUMonitorProtocol:
@@ -57,49 +51,10 @@ def get_gdb_controller(gdb_service:str) -> GdbController:
 
 def check_arguments(args:dict) -> dict:
     # Check docker usage and output dump path
-    if args['host_data_path']:
-        args['dump_path'] = '/data'
     args['dump_path'] = os.path.join(args['dump_path'],'')
-    args['dump_file_path'] = os.path.join(args['dump_path'],'dump.elf')
-    try:
-        args['dump_file_descriptor'] = open(args['dump_file_path'],'wb')
-    except Exception as exception:
-        print(f'[Error] An error occured while trying to open the output file!\nError details: {exception}\nExiting...')
-        exit(1)
-
-    # Check FIFO output
-    try:
-        os.mkfifo(os.path.join(args['dump_path'],'dump_fifo'), 0o777)
-    except OSError as os_exception:
-        if os_exception.errno != errno.EEXIST:
-            print(f'[Error] An error occured while trying to create the FIFO file!\nError details: {os_exception}\nExiting...')
-            exit(2)
-
-    # Check qmp service
-    qmp = dict()
-    qmp_data = args['qmp_service'].split(':')
-    if len(qmp_data) != 2:
-        print('[Error] Not a valid QMP service submitted! Exiting...')
-        exit(3)
-    if not qmp_data[1].isnumeric():
-        print('[Error] Not a valid QMP port submitted! Exiting...')
-        exit(4)
-    qmp['host'] = qmp_data[0]
-    qmp['port'] = int(qmp_data[1])
-    args['qemu_qmp_monitor'] = get_qemu_qmp_monitor(qmp)
-
-    # Check gdb service
-    gdb_data = args['gdb_service'].split(':')
-    if len(gdb_data) != 2:
-        print('[Error] Not a valid GDB service submitted! Exiting...')
-        exit(6)
-    if not gdb_data[1].isnumeric():
-        print('[Error] Not a valid GDB port submitted! Exiting...')
-        exit(7)
     args['gdb_controller'] = get_gdb_controller(args['gdb_service'])
-    args['start_time_gdb'] = datetime.now()
     args['is_little_endian'] = 'little' in args['gdb_controller'].write('show endian')[1]['payload']
-    args['gdb_controller'].write('continue')
+
 
     return args
 
@@ -301,18 +256,17 @@ def create_program_header(elf_header:bytearray, memory_regions:list[dict], is_li
 
     return elf_header, program_header
 
-def dump_header(qmp_monitor:QEMUMonitorProtocol, gdb_controller:GdbController, is_little_endian:bool, uptime:float, custom_values:list[str], dump_file_descriptor:BufferedWriter) -> list[dict]:
+def dump_header(gdb_controller:GdbController, is_little_endian:bool, custom_values:list[str], dump_file_descriptor:BufferedWriter) -> list[dict]:
     """ 
     Retrieves machine data and dumps it in the output file
     Returns memory regions
     """
-    
+    uptime = 0
     # Get the architecture
-    architecture = qmp_monitor.cmd('query-target')
-    if architecture is None:
-        print('[Error] An error occured while trying to get the architecture. Exiting...')
-        exit(9)
-    architecture = architecture['return']['arch']
+    resp = gdb_controller.write(f"attach {arguments.pid}")
+    architecture = resp[-1].get("payload").get("frame").get("arch")
+    if 'x86-64' in architecture:
+        architecture = 'x86_64'
     assert isinstance(architecture, str)
 
     # Dump registers
@@ -321,18 +275,24 @@ def dump_header(qmp_monitor:QEMUMonitorProtocol, gdb_controller:GdbController, i
     registers = extract_registers_values(registers_reply)
 
     # Retrieve memory regions
-    memory_regions_raw = qmp_monitor.cmd('human-monitor-command', {"command-line": "info mtree -f"})
-    if memory_regions_raw is None:
-        print('[Error] An error occured while trying to get memory regions from QMP')
-        exit(11)
-    print('Memory regions raw:')
-    print(memory_regions_raw)
-    memory_regions = split_memory_tree_data(memory_regions_raw['return'])
-    print('Memory regions:')
-    print(memory_regions)
-    memory_regions_data = [(region['start'], region['name']) for region in memory_regions if region['type'] != 'ram']
-    print('Memory regions data:')
-    print(memory_regions_data)
+    gdb_reg_reply = gdb_controller.write('info proc mappings') # get all registers
+    mem_regions = []
+    for i in range (4, len(gdb_reg_reply)-1):
+        mem_region_line = gdb_reg_reply[i].get("payload").split()[1:]
+        if len(mem_region_line) < 5:
+            mem_region_line.append("[?]")
+        region = {
+            "start": int(mem_region_line[0],16),
+            "end": int(mem_region_line[1],16),
+            "type": "ram", # since we are dumping the memory of a process
+            "name": mem_region_line[4] # not sure if this is the name
+        }
+        mem_regions.append(region)
+
+    memory_regions_data = []
+    for x in mem_regions:
+        memory_regions_data.append((x['start'], x['name']))
+
     machine_data = {
         'Architecture': architecture,
         'Uptime': uptime,
@@ -407,24 +367,15 @@ if __name__ == "__main__":
 
     # Arguments parsing and checking
     arguments = check_arguments(parse_arguments())
-    assert list(arguments.keys()) == data_keys
-    
-    # Wait for CTRL-C
-    print("Press CTRL-C to dump the memory, save the registers, and shutdown the machine")
-    wait_for_interrupt()
 
     # Get and process data
-    uptime = (datetime.now() - arguments['start_time_gdb']).total_seconds()
+    uptime = 0
     print('Save registers and dump memory')
-    arguments['qemu_qmp_monitor'].cmd('stop', {})
     
     memory_regions = dump_header(
-        arguments['qemu_qmp_monitor'],
         arguments['gdb_controller'],
         arguments['is_little_endian'],
         uptime,
-        arguments['custom_values'],
-        arguments['dump_file_descriptor']
     )
     dump_memory_regions(
         memory_regions, 
