@@ -28,7 +28,6 @@ lz4==4.3.2
 matplotlib==3.7.2
 more-itertools==10.1.0
 msgpack==1.0.5
-numpy==1.25.2
 packaging==23.1
 pandas==2.0.3
 partd==1.4.0

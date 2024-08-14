@@ -63,6 +63,7 @@ class AddressTranslator:
                 self.word_format = np.dtype('<u4')
         else:
             self.word_type = np.uint64
+            print(self.elf_dump)
             if self.elf_dump.machine_data['Endianness'] == 'big':
                 self.word_format = np.dtype('>u8')
             else:
@@ -238,9 +239,9 @@ class AddressTranslator:
         intervals_offest_to_virtual.sort()
 
         # Fill resolution objects
-        self.virtual_to_offset = IMOffsets(*list(zip(*fused_intervals_virtual_to_offset)))
-        self.offset_to_virtual = IntervalsMappingOverlapping(intervals_offest_to_virtual)
-        self.permissions_mask  = IntervalsMappingData(*list(zip(*fused_intervals_permissions)))
+        #self.virtual_to_offset = IMOffsets(*list(zip(*fused_intervals_virtual_to_offset)))
+        #self.offset_to_virtual = IntervalsMappingOverlapping(intervals_offest_to_virtual)
+        #self.permissions_mask  = IntervalsMappingData(*list(zip(*fused_intervals_permissions)))
 
     def create_bitmap(self) -> None:
         """
@@ -543,27 +544,27 @@ class AddressTranslator:
 class IntelTranslator(AddressTranslator):
     @staticmethod
     def derive_mmu_settings(mmu_class:type, registers:dict[str, int], max_physical_address:int, ignored_pages:list[int]) -> dict[str, int|bool|list[int]]:
-        if mmu_class is IntelAMD64:
-            dtb = ((registers['cr3'] >> 12) & ((1 << (max_physical_address - 12)) - 1)) << 12
+        # if mmu_class is IntelAMD64:
+        #     dtb = ((registers['cr3'] >> 12) & ((1 << (max_physical_address - 12)) - 1)) << 12
 
-        elif mmu_class is IntelPAE:
-            dtb = ((registers['cr3'] >> 5) & (1 << 27) - 1) << 5
+        # elif mmu_class is IntelPAE:
+        #     dtb = ((registers['cr3'] >> 5) & (1 << 27) - 1) << 5
 
-        elif mmu_class is IntelIA32:
-            dtb = ((registers['cr3'] >> 12) & (1 << 20) - 1) << 12
-            max_physical_address = min(max_physical_address, 40)
+        # elif mmu_class is IntelIA32:
+        #     dtb = ((registers['cr3'] >> 12) & (1 << 20) - 1) << 12
+        #     max_physical_address = min(max_physical_address, 40)
 
-        else:
-            raise NotImplementedError
+        # else:
+        #     raise NotImplementedError
 
         return {
-            'table_address': dtb,
-            'wp':  bool((registers['cr0'] >> 16) & 0x1),
-            'ac':  bool((registers['eflags'] >> 18) & 0x1),
-            'nxe': bool((registers['efer'] >> 11) & 0x1),
-            'smep': bool((registers['cr4'] >> 20) & 0x1),
-            'smap': bool((registers['cr4'] >> 21) & 0x1),
-            'max_physical_address': max_physical_address,
+            'table_address': int(0x40),
+            # 'wp':  bool((registers['cr0'] >> 16) & 0x1),
+            # 'ac':  bool((registers['eflags'] >> 18) & 0x1),
+            # 'nxe': bool((registers['efer'] >> 11) & 0x1),
+            # 'smep': bool((registers['cr4'] >> 20) & 0x1),
+            # 'smap': bool((registers['cr4'] >> 21) & 0x1),
+            'max_physical_address': 40,
             'ignored_pages': ignored_pages
         }
 
@@ -800,7 +801,7 @@ class IntelAMD64(IntelTranslator):
     ) -> None:
         self.unpack_format = "<Q"
         self.total_levels = 4
-        self.prefix = 0xFFFF800000000000
+        self.prefix = 0x00007ffc
         self.table_sizes = [0x1000] * 4
         self.shifts = [39, 30, 21, 12]
         self.wordsize = 8
@@ -1518,11 +1519,11 @@ def factory(translator: type, elf_dump: ELFDump, ignored_pages: list[int]) -> AA
     registers:dict[str, int] = machine_data['CPURegisters']
     
     if translator == type(IntelTranslator):
-        max_physical_address = machine_data['CPUSpecifics']['MAXPHYADDR']
+        max_physical_address = 40 # placeholder for us, should be machine_data['CPUSpecifics']['MAXPHYADDR']
         if type(max_physical_address) == str and '[D' in max_physical_address:
             max_physical_address = int(max_physical_address[:-2])
         assert isinstance(max_physical_address, int)
-        translator_class = IntelTranslator.derive_translator_class(registers)
+        translator_class = IntelAMD64
         mmu_settings = IntelTranslator.derive_mmu_settings(translator_class, registers, max_physical_address, ignored_pages)
     elif translator == type(RISCVTranslator):
         translator_class = RISCVTranslator.derive_translator_class(registers)

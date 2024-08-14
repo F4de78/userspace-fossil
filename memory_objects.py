@@ -757,6 +757,7 @@ class ELFDump:
         for segment in elf_file.iter_segments():
             # NOTES
             if isinstance(segment, NoteSegment):
+                print("Note segment")
                 for note in segment.iter_notes():
                     # Ignore NOTE genrated by other softwares
                     if note['n_name'] != 'FOSSIL':
@@ -769,6 +770,7 @@ class ELFDump:
                     self.machine_data['Endianness'] = 'little' if elf_file.header['e_ident'].EI_DATA == 'ELFDATA2LSB' else 'big'
                     self.machine_data['Architecture'] = '_'.join(elf_file.header['e_machine'].split('_')[1:])
             else:
+                print("other segment")
                 # Fill arrays needed to translate physical addresses to file offsets
                 region_start = segment['p_vaddr']
                 region_end = region_start + segment['p_memsz']
@@ -788,7 +790,8 @@ class ELFDump:
         # Compact intervals
         physical_to_offset_list = self._compact_intervals(physical_to_offset_list)
         offset_to_physical_list = self._compact_intervals(offset_to_physical_list)
-        physical_to_memory_mapped_device_list = self._compact_intervals_simple(physical_to_memory_mapped_device_list)
+        physical_to_memory_mapped_device_list = self._compact_intervals(physical_to_memory_mapped_device_list)
+        print(physical_to_memory_mapped_device_list)
 
         x = sorted(physical_to_offset_list)
         x = zip(x)
@@ -796,7 +799,7 @@ class ELFDump:
 
         self.physical_to_offset = IMOffsets(*list(zip(*sorted(physical_to_offset_list))))
         self.offset_to_physical = IMOffsets(*list(zip(*sorted(offset_to_physical_list))))
-        self.physical_to_memory_mapped_device = IntervalsMappingSimple(*list(zip(*sorted(physical_to_memory_mapped_device_list))))
+        #self.physical_to_memory_mapped_device = IntervalsMappingSimple(*list(zip(*sorted(physical_to_memory_mapped_device_list))))
     
     def _compact_intervals_simple(self, intervals:list[tuple[int, int]]) -> list[tuple[int, int]]:
         """

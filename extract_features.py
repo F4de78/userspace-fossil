@@ -7,6 +7,9 @@ import json
 import logging
 import os
 import subprocess
+# DEBUG
+import pprint
+
 
 from addrspaces import get_virtual_space
 from addrspaces import (
@@ -86,6 +89,8 @@ def load_main_data(elf_dump:str, ignored_pages:list[int], output_path:str) -> tu
     
     # Load the ELF file and parse it
     print('Load ELF...')
+    import time
+    time.sleep(10)
     elf_object = ELFDump(elf_dump)
 
     # Retrieve architecture
@@ -102,8 +107,15 @@ def load_main_data(elf_dump:str, ignored_pages:list[int], output_path:str) -> tu
     # - Strings
     # - Memory bitmap
     print('Get virtual space...')
+    import time
+    
+    # for userspace should be skipped ?
     virtual_space = get_virtual_space(elf_object, ignored_pages)
+    print("end virtual_address")
+
+    print("Get pointers...")
     virtual_space.retrieve_pointers()
+    print("end pointers")
     virtual_space.retrieve_strings()
     virtual_space.create_bitmap()
 
