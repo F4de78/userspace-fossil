@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 
-from copy import deepcopy
-from cmd2 import Cmd, with_category, with_argparser, style, fg, bg
+from cmd2 import Cmd, with_category, with_argparser
 import argparse
 import sys
-from more_itertools import circular_shifts
 from prettytable import PrettyTable
 from compress_pickle import load as load_c
 from itertools import chain
@@ -99,7 +97,7 @@ class FossilShell(Cmd):
 \t\t\t\t\t |_|   \___/ |___/|___/|_||_|\n\
                              \n\
                              "
-        Cmd.__init__(self, use_ipython=True)
+        Cmd.__init__(self)
         self.self_in_py = True
         # self.intro = style(dinosaur, bold=True)#, fg=fg.black, bg=bg.white)
         self.prompt = 'fossil> '

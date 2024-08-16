@@ -18,7 +18,6 @@ from trees import tree_elements, tree_elements_breadth
 from multiprocessing import Pool 
 from pickle import dump 
 from itertools import chain
-from IPython import embed
 from objects import LinkedList, DoubleLinkedList, PointersGroup, Tree, PtrsArray, MemoryObject
 from elftools.elf.elffile import ELFFile
 import glob, os
@@ -259,7 +258,8 @@ def main():
 
     # Brutal, based on extension
     print("Determine CPU features...")
-    elf_filename = glob.glob(args.data_dir + "*.elf")
+    elf_filename = glob.glob(args.data_dir + "/extracted_kernel.elf")
+    print(elf_filename)
     with open(list(elf_filename)[0], "rb") as f:
         elffile = ELFFile(f)
         if elffile.get_machine_arch() == 'x86': #  TODO: support other arch
@@ -304,18 +304,23 @@ def main():
     for offset in cicles.keys():
         not_degenerate[offset] = [x for x in cicles[offset] if not x.is_degenerate]
     
-    top_offset = sorted([(len(l),k) for k,l in not_degenerate.items()], reverse=True)[0][1] 
-    top_dlink = not_degenerate[top_offset]
-    top_dlink.sort(key=lambda x: len(x.ptrs_list), reverse=True)
-    print(f"Top offset in cicles: {top_offset}, {len(top_dlink)}/{sum([len(x) for x in cicles.values()])}")
+    top_offset = sorted([(len(l),k) for k,l in not_degenerate.items()], reverse=True)
+    if top_offset == []:
+        top_dlink = []
+        print("No double linked lists found")
+    else:
+        top_offset = top_offset[0][1]
+        top_dlink = not_degenerate[top_offset]
+        top_dlink.sort(key=lambda x: len(x.ptrs_list), reverse=True)
+        print(f"Top offset in cicles: {top_offset}, {len(top_dlink)}/{sum([len(x) for x in cicles.values()])}")
     
-    for dlist in top_dlink:
-        already_assigned.extend(dlist.ptrs_list)
-        already_assigned.extend(dlist.ptrs_list_back)
-    already_assigned = set(already_assigned)
-    print("Determine linear/cicle double linked lists shapes and strings...")
-    with Pool() as pool:
-        top_dlink = pool.map(shape_string, top_dlink)
+        for dlist in top_dlink:
+            already_assigned.extend(dlist.ptrs_list)
+            already_assigned.extend(dlist.ptrs_list_back)
+        already_assigned = set(already_assigned)
+        print("Determine linear/cicle double linked lists shapes and strings...")
+        with Pool() as pool:
+            top_dlink = pool.map(shape_string, top_dlink)
 
     # Convert trees (only trees with at least 2 levels)
     print("Convert trees...")
@@ -347,12 +352,17 @@ def main():
     # for x in final_trees:
     #     weighted_offsets.extend([x.dests_offsets] * 2**x.levels)
 
-    top_offset_trees = Counter([x.dests_offsets for x in final_trees if x.levels == final_trees[0].levels]).most_common(1)[0][0] #Counter(weighted_offsets).most_common(1)[0][0] #Counter([x.dests_offsets for x in final_trees]).most_common(1)[0][0]
-    top_trees = [x for x in final_trees if x.dests_offsets == top_offset_trees]
-    top_trees.sort(key=lambda x: x.levels, reverse=True)
-    print(f"Top offset in trees: {top_offset_trees}, {len(top_trees)}/{len(final_trees)}")
-    trees = top_trees
     
+    top_offset_trees = [x.dests_offsets for x in final_trees if x.levels == final_trees[0].levels]
+    if top_offset_trees == []:
+        print("No trees found")
+    else:
+        top_offset_trees = Counter([x.dests_offsets for x in final_trees if x.levels == final_trees[0].levels]).most_common(1)[0][0] #Counter(weighted_offsets).most_common(1)[0][0] #Counter([x.dests_offsets for x in final_trees]).most_common(1)[0][0]
+        top_trees = [x for x in final_trees if x.dests_offsets == top_offset_trees]
+        top_trees.sort(key=lambda x: x.levels, reverse=True)
+        print(f"Top offset in trees: {top_offset_trees}, {len(top_trees)}/{len(final_trees)}")
+        trees = top_trees
+        
     print("Find array of strings...")
     candidates = {x for x in ptrs if ptrs[x] in strings}
     strings_arrays = [PtrsArray(x) for x in find_ptrs_arrays(candidates)]
@@ -420,7 +430,10 @@ def main():
 
     # Extract children lists
     children = {"cicles": [], "linears": [], "trees": [], "arrays": []}
-    offset_min = min(top_offset)
+    if top_offset == []:
+        offset_min = 0
+    else:
+        offset_min = min(top_offset)
     for struct_set, struct_name in [(cicles, "cicles"), (linears, "linears"), (trees, "trees"), ([x.structs for x in ptrs_array], "arrays")]:
         print(f"Determine first level children lists for {struct_name}...")
         
