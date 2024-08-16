@@ -244,16 +244,17 @@ class ELFDump:
         # Compact intervals
         p2o_list = self._compact_intervals(p2o_list)
         o2p_list = self._compact_intervals(o2p_list)
-        p2mmd_list = self._compact_intervals_simple(p2mmd_list)
+        #p2mmd_list = self._compact_intervals_simple(p2mmd_list)
 
         self.p2o = IMOffsets(*list(zip(*sorted(p2o_list))))
         self.o2p = IMOffsets(*list(zip(*sorted(o2p_list))))
-        self.p2mmd = IMSimple(*list(zip(*sorted(p2mmd_list))))
+        #self.p2mmd = IMSimple(*list(zip(*sorted(p2mmd_list))))
     
     def _compact_intervals_simple(self, intervals):
         """Compact intervals if pointer values are contiguos"""
         fused_intervals = []
         prev_begin = prev_end = -1
+        begin,end = 0,0
         for interval in intervals:
             begin, end = interval            
             if prev_end == begin:
@@ -405,7 +406,7 @@ class AddressTranslator:
                 self.word_fmt = np.dtype(">u8")
             else:
                 self.word_fmt = np.dtype("<u8")
-        
+        # since the dump has only virtual addresses
         self.v2o = None
         self.o2v = None
         self.pmasks = None
@@ -549,48 +550,48 @@ class AddressTranslator:
         mapping = defaultdict(list)
         reverse_mapping = {}
         stats = DefaultDict(int)
-        self._explore_radixtree(table_addr, mapping, reverse_mapping, upmask=upmask, stats=stats)
+        # self._explore_radixtree(table_addr, mapping, reverse_mapping, upmask=upmask, stats=stats)
 
-        # Print statistics
-        stats = Counter(stats)
-        # for k,v in stats.most_common(10):
-        #     print(hex(k), v)
+        # # Print statistics
+        # stats = Counter(stats)
+        # # for k,v in stats.most_common(10):
+        # #     print(hex(k), v)
 
-        # Needed for ELF virtual mapping reconstruction
-        self.reverse_mapping = reverse_mapping
-        self.mapping = mapping
+        # # Needed for ELF virtual mapping reconstruction
+        # self.reverse_mapping = reverse_mapping
+        # self.mapping = mapping
 
-        # Collect all intervals (start, end+1, phy_page, pmask)
-        intervals = []
-        for pmask, mapping_p in mapping.items():
-            if pmask[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
-                continue
-            intervals.extend([(x[0], x[0]+x[1], x[2], pmask) for x in mapping_p if not x[3]]) # Ignore MMD
-        intervals.sort()
+        # # Collect all intervals (start, end+1, phy_page, pmask)
+        # intervals = []
+        # for pmask, mapping_p in mapping.items():
+        #     if pmask[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
+        #         continue
+        #     intervals.extend([(x[0], x[0]+x[1], x[2], pmask) for x in mapping_p if not x[3]]) # Ignore MMD
+        # intervals.sort()
 
-        # Fuse intervals in order to reduce the number of elements to speed up
-        fused_intervals_v2o = self._compact_intervals_virt_offset(intervals)
-        fused_intervals_permissions = self._compact_intervals_permissions(intervals)
+        # # Fuse intervals in order to reduce the number of elements to speed up
+        # fused_intervals_v2o = self._compact_intervals_virt_offset(intervals)
+        # fused_intervals_permissions = self._compact_intervals_permissions(intervals)
         
-        # Offset to virtual is impossible to compact in a easy way due to the
-        # multiple-to-one mapping. We order the array and use bisection to find
-        # the possible results and a partial 
-        intervals_o2v = []
-        for pmasks, d in reverse_mapping.items():
-            if pmasks[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
-                continue
-            for k, v in d.items():
-                # We have to translate phy -> offset
-                offset = self.phy.p2o[k[0]]
-                if offset == -1: # Ignore unresolvable pages
-                    continue
-                intervals_o2v.append((offset, k[1]+offset, tuple(v)))
-        intervals_o2v.sort()
+        # # Offset to virtual is impossible to compact in a easy way due to the
+        # # multiple-to-one mapping. We order the array and use bisection to find
+        # # the possible results and a partial 
+        # intervals_o2v = []
+        # for pmasks, d in reverse_mapping.items():
+        #     if pmasks[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
+        #         continue
+        #     for k, v in d.items():
+        #         # We have to translate phy -> offset
+        #         offset = self.phy.p2o[k[0]]
+        #         if offset == -1: # Ignore unresolvable pages
+        #             continue
+        #         intervals_o2v.append((offset, k[1]+offset, tuple(v)))
+        # intervals_o2v.sort()
 
         # Fill resolution objects
-        self.v2o = IMOffsets(*list(zip(*fused_intervals_v2o)))
-        self.o2v = IMOverlapping(intervals_o2v)
-        self.pmasks = IMData(*list(zip(*fused_intervals_permissions)))
+        self.v2o = self.phy.p2o
+        self.o2v = self.phy.o2p
+        #self.pmasks = IMData(*list(zip(*fused_intervals_permissions)))
 
     def create_bitmap(self):
         """Create a bitmap starting from the ELF file containing 0 if the byte
@@ -1057,26 +1058,26 @@ class AddressTranslator:
 
 class IntelTranslator(AddressTranslator):
     @staticmethod
-    def derive_mmu_settings(mmu_class, regs_dict, mphy, ignored_pages):
-        if mmu_class is IntelAMD64:
-            dtb = ((regs_dict["cr3"] >> 12) & ((1 << (mphy - 12)) - 1)) << 12
+    def derive_mmu_settings(mmu_class,mphy, ignored_pages):
+        # if mmu_class is IntelAMD64:
+        #     dtb = ((regs_dict["cr3"] >> 12) & ((1 << (mphy - 12)) - 1)) << 12
 
-        elif mmu_class is IntelPAE:
-            dtb = ((regs_dict["cr3"] >> 5) & (1 << 27) - 1) << 5
+        # elif mmu_class is IntelPAE:
+        #     dtb = ((regs_dict["cr3"] >> 5) & (1 << 27) - 1) << 5
 
-        elif mmu_class is IntelIA32:
-            dtb = ((regs_dict["cr3"] >> 12) & (1 << 20) - 1) << 12
-            mphy = min(mphy, 40)
+        # elif mmu_class is IntelIA32:
+        #     dtb = ((regs_dict["cr3"] >> 12) & (1 << 20) - 1) << 12
+        #     mphy = min(mphy, 40)
 
-        else:
-            raise NotImplementedError
+        # else:
+        #     raise NotImplementedError
 
-        return {"dtb": dtb,
-                "wp":  bool((regs_dict["cr0"] >> 16) & 0x1),
-                "ac":  bool((regs_dict["eflags"] >> 18) & 0x1),
-                "nxe": bool((regs_dict["efer"] >> 11) & 0x1),
-                "smep": bool((regs_dict["cr4"] >> 20) & 0x1),
-                "smap": bool((regs_dict["cr4"] >> 21) & 0x1),
+        return {"dtb": 0x40,
+                # "wp":  bool((regs_dict["cr0"] >> 16) & 0x1),
+                # "ac":  bool((regs_dict["eflags"] >> 18) & 0x1),
+                # "nxe": bool((regs_dict["efer"] >> 11) & 0x1),
+                # "smep": bool((regs_dict["cr4"] >> 20) & 0x1),
+                # "smap": bool((regs_dict["cr4"] >> 21) & 0x1),
                 "mphy": mphy,
                 "ignored_pages": ignored_pages
                }
@@ -1100,12 +1101,12 @@ class IntelTranslator(AddressTranslator):
     def factory(phy, ignored_pages):
         machine_data = phy.get_machine_data()
         regs = machine_data["CPURegisters"]
-        mphy = machine_data["CPUSpecifics"]["MAXPHYADDR"]
-        if type(mphy) == str and "[D" in mphy:
-            mphy = int(mphy[:-2])
+        mphy = 40
+        # if type(mphy) == str and "[D" in mphy:
+        #     mphy = int(mphy[:-2])
 
-        translator_c = IntelTranslator.derive_translator_class(regs)
-        mmu_settings = IntelTranslator.derive_mmu_settings(translator_c, regs, mphy, ignored_pages)
+        translator_c = IntelAMD64
+        mmu_settings = IntelTranslator.derive_mmu_settings(translator_c, mphy, ignored_pages)
         return translator_c(phy=phy, **mmu_settings)
 
 

@@ -45,6 +45,8 @@ def main():
 
     # Load the ELF file and parse it
     print("Load ELF...")
+    import time as t
+    #t.sleep(15)
     phy_elf = ELFDump(args.dump_elf)
     
     print("Get virtspace...")
