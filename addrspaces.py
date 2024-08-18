@@ -181,6 +181,8 @@ class ELFDump:
         self.machine_data = {}
         self.p2o = None   # Physical to RAM (ELF offset)
         self.o2p = None   # RAM (ELF offset) to Physical
+        self.p2o_list = []   # Physical to RAM (ELF offset)
+        self.o2p_list = []   # RAM (ELF offset) to Physical
         self.p2mmd = None # Physical to Memory Mapped Devices (ELF offset)
         self.elf_buf = np.zeros(0, dtype=np.byte)
         self.elf_filename = elf_filename
@@ -196,8 +198,6 @@ class ELFDump:
 
     def __read_elf_file(self, elf_fd):
         """Parse the dump in ELF format"""
-        o2p_list = []
-        p2o_list = []
         p2mmd_list = []
         elf_file = ELFFile(elf_fd)
 
@@ -226,8 +226,8 @@ class ELFDump:
 
                 if segm["p_filesz"]:
                     p_offset = segm["p_offset"]
-                    p2o_list.append((r_start, (r_end, p_offset)))
-                    o2p_list.append((p_offset, (p_offset + (r_end - r_start), r_start)))
+                    self.p2o_list.append((r_start, (r_end, p_offset)))
+                    self.o2p_list.append((p_offset, (p_offset + (r_end - r_start), r_start)))
                 else:
                     # device_name = "" # UNUSED
                     for device in self.machine_data["MemoryMappedDevices"]: # Possible because NOTES always the first segment
@@ -242,12 +242,12 @@ class ELFDump:
         # self.p2mmd_list = p2mmd_list
 
         # Compact intervals
-        p2o_list = self._compact_intervals(p2o_list)
-        o2p_list = self._compact_intervals(o2p_list)
+        self.p2o_list = self._compact_intervals(self.p2o_list)
+        self.o2p_list = self._compact_intervals(self.o2p_list)
         #p2mmd_list = self._compact_intervals_simple(p2mmd_list)
 
-        self.p2o = IMOffsets(*list(zip(*sorted(p2o_list))))
-        self.o2p = IMOffsets(*list(zip(*sorted(o2p_list))))
+        self.p2o = IMOffsets(*list(zip(*sorted(self.p2o_list))))
+        self.o2p = IMOffsets(*list(zip(*sorted(self.o2p_list))))
         #self.p2mmd = IMSimple(*list(zip(*sorted(p2mmd_list))))
     
     def _compact_intervals_simple(self, intervals):
@@ -498,6 +498,7 @@ class AddressTranslator:
         contigous (virt -> offset)"""
         fused_intervals = []
         prev_begin = prev_end = prev_offset = -1
+        begin = 0
         for interval in intervals:
             begin, end, phy, _ = interval
 
@@ -528,6 +529,7 @@ class AddressTranslator:
         fused_intervals = []
         prev_begin = prev_end = -1
         prev_pmask = (0, 0)
+        begin = 0
         for interval in intervals:
             begin, end, _, pmask = interval            
             if prev_end == begin and prev_pmask == pmask:
@@ -550,47 +552,62 @@ class AddressTranslator:
         mapping = defaultdict(list)
         reverse_mapping = {}
         stats = DefaultDict(int)
-        # self._explore_radixtree(table_addr, mapping, reverse_mapping, upmask=upmask, stats=stats)
+        self._explore_radixtree(table_addr, mapping, reverse_mapping, upmask=upmask, stats=stats)
 
-        # # Print statistics
-        # stats = Counter(stats)
-        # # for k,v in stats.most_common(10):
-        # #     print(hex(k), v)
+        # Print statistics
+        stats = Counter(stats)
+        # for k,v in stats.most_common(10):
+        #     print(hex(k), v)
 
-        # # Needed for ELF virtual mapping reconstruction
-        # self.reverse_mapping = reverse_mapping
-        # self.mapping = mapping
+        # Needed for ELF virtual mapping reconstruction
+        self.reverse_mapping = reverse_mapping
+        self.mapping = mapping
 
-        # # Collect all intervals (start, end+1, phy_page, pmask)
-        # intervals = []
-        # for pmask, mapping_p in mapping.items():
-        #     if pmask[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
-        #         continue
-        #     intervals.extend([(x[0], x[0]+x[1], x[2], pmask) for x in mapping_p if not x[3]]) # Ignore MMD
-        # intervals.sort()
+        # Collect all intervals (start, end+1, phy_page, pmask)
+        intervals = []
+        for pmask, mapping_p in mapping.items():
+            if pmask[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
+                continue
+            intervals.extend([(x[0], x[0]+x[1], x[2], pmask) for x in mapping_p if not x[3]]) # Ignore MMD
+        intervals.sort()
 
-        # # Fuse intervals in order to reduce the number of elements to speed up
-        # fused_intervals_v2o = self._compact_intervals_virt_offset(intervals)
-        # fused_intervals_permissions = self._compact_intervals_permissions(intervals)
-        
-        # # Offset to virtual is impossible to compact in a easy way due to the
-        # # multiple-to-one mapping. We order the array and use bisection to find
-        # # the possible results and a partial 
-        # intervals_o2v = []
-        # for pmasks, d in reverse_mapping.items():
-        #     if pmasks[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
-        #         continue
-        #     for k, v in d.items():
-        #         # We have to translate phy -> offset
-        #         offset = self.phy.p2o[k[0]]
-        #         if offset == -1: # Ignore unresolvable pages
-        #             continue
-        #         intervals_o2v.append((offset, k[1]+offset, tuple(v)))
-        # intervals_o2v.sort()
+        # Fuse intervals in order to reduce the number of elements to speed up
+        fused_intervals_v2o = self._compact_intervals_virt_offset(intervals)
+        fused_intervals_permissions = self._compact_intervals_permissions(intervals)
+
+        # Offset to virtual is impossible to compact in a easy way due to the
+        # multiple-to-one mapping. We order the array and use bisection to find
+        # the possible results and a partial 
+        intervals_o2v = []
+        for pmasks, d in reverse_mapping.items():
+            if pmasks[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
+                continue
+            for k, v in d.items():
+                # We have to translate phy -> offset
+                offset = self.phy.p2o[k[0]]
+                if offset == -1: # Ignore unresolvable pages
+                    continue
+                intervals_o2v.append((offset, k[1]+offset, tuple(v)))
+        intervals_o2v.sort()
 
         # Fill resolution objects
         self.v2o = self.phy.p2o
-        self.o2v = self.phy.o2p
+
+
+        newo2pvalues = []
+        newo2pkeys = []
+        for i in tuple(self.phy.o2p.get_values()):
+            newo2pvalues.append(i[1][1])
+            newo2pkeys.append(i[0])
+
+        newo2p = {}
+        for i in range(len(newo2pvalues)):
+            newo2p[newo2pkeys[i]] = [newo2pvalues[i]]
+
+        print(newo2p)
+        a = IMOverlapping(newo2pkeys, newo2pvalues)
+        a.get_values()
+        self.o2v = IMOverlapping(newo2pkeys, newo2pvalues)
         #self.pmasks = IMData(*list(zip(*fused_intervals_permissions)))
 
     def create_bitmap(self):
@@ -631,6 +648,8 @@ class AddressTranslator:
             # if ((dsto >> self.shifts[-1]) << self.shifts[-1]) in null_pages:
             #     continue
 
+            import time as t
+            t.sleep(15)
             # Validate srcs
             if len(srcs_list := self.o2v[int(srcs_offsets[idx])]) > 0:
                 for src in srcs_list:
