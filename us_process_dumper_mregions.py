@@ -34,12 +34,14 @@ def dump_process(pid: int):
     # Create ELF header
     gdbmi = GdbController()
     # attach to running process
+    
     resp = gdbmi.write(f"attach {pid}")
     architecture = resp[-1].get("payload").get("frame").get("arch")
-
     if 'x86-64' in architecture:
         architecture = 'x86_64'
     print(f"Architecture: {architecture}")
+    little_endian = True if "little" in gdbmi.write("show endian")[1]["payload"] else False
+    print(f"Endianess: {"Little" if little_endian else "Big"}")
     elf_h = make_elf_header(architecture, little_endian)
 
     # Dump registers
@@ -55,7 +57,7 @@ def dump_process(pid: int):
 
         if len(mem_region_line) < 6:
             mem_region_line.append("[?]")
-
+        # skip linked libraries
         if "libc" in mem_region_line[5] or "ld" in mem_region_line[4]:
             continue 
         region = [
@@ -104,7 +106,7 @@ def dump_process(pid: int):
         r_start, r_end, _ , _ = region
 
         r_size = r_end - r_start + 1
-        print(r_start, r_end)
+        #print(r_start, r_end)
         fifo_fd = open(path + "aux" + str(line_no), "wb") # not the cleanest way to do it...
         #append the content of aux{line_no} to dump_fd
         gdbmi.write(f"dump binary memory {path}aux{str(line_no)} {hex(r_start)} {hex(r_end)}")
@@ -287,7 +289,7 @@ def main():
     global path
     global custom_values
 
-    parser = argparse.ArgumentParser(description='You have to call QEMU with "-qmp tcp:HOST:PORT,server -s" options')
+    parser = argparse.ArgumentParser(description='Process and registers dumper')
     parser.add_argument("-filename", help="Prefix for ELF dump and regs file.", type=str)
     parser.add_argument("-pid", help="PID of the running process", type=int)
     args = parser.parse_args()
@@ -300,7 +302,7 @@ def main():
         print("Unable to open output file!")
         exit(1)
     path = os.path.dirname(os.path.abspath(args.filename)) + "/"
-
+    
     # Create dump fifo
     try:
         os.mkfifo(path + "dump_fifo")
