@@ -547,6 +547,18 @@ class AddressTranslator:
 
         return fused_intervals[1:]
 
+    def dict_to_tuple_list(input_dict):
+        result = []
+        keys = list(input_dict.keys())
+        
+        for i in range(len(keys) - 1):
+            key1 = keys[i]
+            key2 = keys[i + 1]
+            value = input_dict[key1]
+            result.append((key1, key2, tuple(value)))
+        
+        return result
+
     def _reconstruct_mappings(self, table_addr, upmask):
         # Explore the radix tree
         mapping = defaultdict(list)
@@ -604,10 +616,24 @@ class AddressTranslator:
         for i in range(len(newo2pvalues)):
             newo2p[newo2pkeys[i]] = [newo2pvalues[i]]
 
-        print(newo2p)
-        a = IMOverlapping(newo2pkeys, newo2pvalues)
-        a.get_values()
-        self.o2v = IMOverlapping(newo2pkeys, newo2pvalues)
+        result = []
+        keys = list(newo2p.keys())
+        
+        for i in range(len(keys) - 1):
+            key1 = keys[i]
+            key2 = keys[i + 1]
+            value = newo2p[key1]
+            result.append((key1, key2, tuple(value)))
+        
+        print(result)
+
+        import time as t
+        # t.sleep(15)
+        # print(newo2p)
+        # a = IMOverlapping(newo2p)
+        # a.get_values()
+
+        self.o2v = IMOverlapping(result)
         #self.pmasks = IMData(*list(zip(*fused_intervals_permissions)))
 
     def create_bitmap(self):
@@ -648,8 +674,6 @@ class AddressTranslator:
             # if ((dsto >> self.shifts[-1]) << self.shifts[-1]) in null_pages:
             #     continue
 
-            import time as t
-            t.sleep(15)
             # Validate srcs
             if len(srcs_list := self.o2v[int(srcs_offsets[idx])]) > 0:
                 for src in srcs_list:
