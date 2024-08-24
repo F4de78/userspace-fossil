@@ -41,7 +41,6 @@ def dump_process(pid: int):
         architecture = 'x86_64'
     print(f"Architecture: {architecture}")
     little_endian = True if "little" in gdbmi.write("show endian")[1]["payload"] else False
-    print(f"Endianess: {"Little" if little_endian else "Big"}")
     elf_h = make_elf_header(architecture, little_endian)
 
     # Dump registers
@@ -58,8 +57,8 @@ def dump_process(pid: int):
         if len(mem_region_line) < 6:
             mem_region_line.append("[?]")
         # skip linked libraries
-        if "libc" in mem_region_line[5] or "ld" in mem_region_line[4]:
-            continue 
+        # if "libc" in mem_region_line[5] or "ld" in mem_region_line[4]:
+        #     continue 
         region = [
             int(mem_region_line[0],16),
             int(mem_region_line[1],16),
