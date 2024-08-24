@@ -61,7 +61,7 @@ def main():
 
     # Produce a kernel VAS only ELF file
     print("Export kernel VAS ELF...")
-    virtspace.export_virtual_memory_elf(str(dest_path) + "/extracted_kernel.elf", True, False)
+    virtspace.export_virtual_memory_elf(str(dest_path) + "/extracted_kernel.elf", False, False)
     ghidra_path = os.getenv("GHIDRA_PATH")
     if not ghidra_path:
         print("Error: GHIDRA_PATH not set!")
@@ -78,6 +78,7 @@ def main():
                  + f" -processor {processor}" \
                  + f" -scriptPath {os.path.join(os.path.dirname(__file__),'ghidra')}" \
                  + f" -postScript export_xrefs.py {out_filename}"
+    print(ghidra_cmd)
     functions = []
     try:
         ret = subprocess_check_output_strip(ghidra_cmd)

@@ -502,7 +502,7 @@ class AddressTranslator:
         for interval in intervals:
             begin, end, phy, _ = interval
 
-            offset = self.phy.p2o[phy]
+            offset = self.v2o[phy]
             if offset == -1:
                 continue
 
@@ -517,7 +517,7 @@ class AddressTranslator:
         if prev_begin != begin:
             fused_intervals.append((prev_begin, (prev_end, prev_offset)))
         else:
-            offset = self.phy.p2o[phy]
+            offset = self.v2o[phy]
             if offset == -1:
                 print(f"ERROR!! {phy}")
             else:
@@ -573,36 +573,45 @@ class AddressTranslator:
 
         # Needed for ELF virtual mapping reconstruction
         self.reverse_mapping = reverse_mapping
-        self.mapping = mapping
+
+        mockPermission = (0, 6)
+        newMapping = defaultdict(list)
+        for p in self.phy.p2o.get_values():
+            newMapping[mockPermission].append((p[1][1],4096,0,False))# virtual address, page size, physical address, in_mmd
+
+        mapping = newMapping
+        self.mapping = newMapping
 
         # Collect all intervals (start, end+1, phy_page, pmask)
         intervals = []
         for pmask, mapping_p in mapping.items():
-            if pmask[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
-                continue
+            # if pmask[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
+            #     continue
             intervals.extend([(x[0], x[0]+x[1], x[2], pmask) for x in mapping_p if not x[3]]) # Ignore MMD
         intervals.sort()
-
+        print(intervals)
         # Fuse intervals in order to reduce the number of elements to speed up
         fused_intervals_v2o = self._compact_intervals_virt_offset(intervals)
+        print(fused_intervals_v2o)
         fused_intervals_permissions = self._compact_intervals_permissions(intervals)
 
         # Offset to virtual is impossible to compact in a easy way due to the
         # multiple-to-one mapping. We order the array and use bisection to find
         # the possible results and a partial 
-        intervals_o2v = []
-        for pmasks, d in reverse_mapping.items():
-            if pmasks[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
-                continue
-            for k, v in d.items():
-                # We have to translate phy -> offset
-                offset = self.phy.p2o[k[0]]
-                if offset == -1: # Ignore unresolvable pages
-                    continue
-                intervals_o2v.append((offset, k[1]+offset, tuple(v)))
-        intervals_o2v.sort()
+        # intervals_o2v = []
+        # for pmasks, d in reverse_mapping.items():
+        #     if pmasks[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
+        #         continue
+        #     for k, v in d.items():
+        #         # We have to translate phy -> offset
+        #         offset = self.phy.p2o[k[0]]
+        #         if offset == -1: # Ignore unresolvable pages
+        #             continue
+        #         intervals_o2v.append((offset, k[1]+offset, tuple(v)))
+        # intervals_o2v.sort()
 
         # Fill resolution objects
+        # self.p2o = IMOffsets(*list(zip(*sorted(p2o_list))))
         self.v2o = self.phy.p2o
 
 
@@ -628,13 +637,11 @@ class AddressTranslator:
         print(result)
 
         import time as t
-        # t.sleep(15)
+        #t.sleep(15)
         # print(newo2p)
-        # a = IMOverlapping(newo2p)
-        # a.get_values()
 
         self.o2v = IMOverlapping(result)
-        #self.pmasks = IMData(*list(zip(*fused_intervals_permissions)))
+        self.pmasks = IMData(*list(zip(*fused_intervals_permissions)))
 
     def create_bitmap(self):
         """Create a bitmap starting from the ELF file containing 0 if the byte
@@ -898,13 +905,16 @@ class AddressTranslator:
                         strings[substr_vaddr] = value[i:]
                         # if in_rw:
                         #     rw_strings.append(substr_vaddr)
-
         self.strs = strings
         # self.rw_strings = set(rw_strings)
 
-    def export_virtual_memory_elf(self, elf_filename, kernel=True, only_executable=False, ignore_empties=True):
+    def export_virtual_memory_elf(self, elf_filename, kernel=False, only_executable=False, ignore_empties=True):
         """Create an ELF file containg the virtual address space of the kernel/process"""
         print("Convert dump to virtual addresses ELF...")
+
+        import time as t
+        t.sleep(15)
+
         with open(elf_filename, "wb") as elf_fd:
             # Create the ELF header and write it on the file
             machine_data = self.phy.get_machine_data()
@@ -942,17 +952,16 @@ class AddressTranslator:
             # For each pmask try to compact intervals in order to reduce the number of segments
             intervals = defaultdict(list)
             for pmasks, intervals_list in self.mapping.items():
-                
-                if not(bool(pmasks[1]) ^ kernel): # Select only kernel/process mappings
-                    continue
+                # if not(bool(pmasks[1]) ^ kernel): # Select only kernel/process mappings
+                #     continue
                 
                 if kernel:
                     pmask = pmasks[0]
                 else:
                     pmask = pmasks[1]
                 
-                if only_executable and not(bool(pmask & 0x1)): # Select only/all executable mappings
-                    continue
+                # if only_executable and not(bool(pmask & 0x1)): # Select only/all executable mappings
+                #     continue
                 
                 if ignore_empties:
                     for x in intervals_list:
@@ -1001,7 +1010,6 @@ class AddressTranslator:
                     else:
                         fused_intervals.append([begin, end, offset])
                 intervals[pmask] = sorted(fused_intervals[1:], key=lambda x: x[1] - x[0], reverse=True)
-            
             # Write segments in the new file and fill the program header
             p_offset = len(elf_h)
             offset2p_offset = {} # Slow but more easy to implement (best way: a tree sort structure able to be updated)
