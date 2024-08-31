@@ -179,10 +179,10 @@ class ELFDump:
     def __init__(self, elf_filename):
         self.filename = elf_filename
         self.machine_data = {}
-        self.p2o = None   # Physical to RAM (ELF offset)
-        self.o2p = None   # RAM (ELF offset) to Physical
-        self.p2o_list = []   # Physical to RAM (ELF offset)
-        self.o2p_list = []   # RAM (ELF offset) to Physical
+        self.v2o = None   # Virtual to RAM (ELF offset)
+        self.o2v = None   # RAM (ELF offset) to Physical
+        self.v2o_list = []   # Physical to RAM (ELF offset)
+        self.o2v_list = []   # RAM (ELF offset) to Physical
         self.p2mmd = None # Physical to Memory Mapped Devices (ELF offset)
         self.elf_buf = np.zeros(0, dtype=np.byte)
         self.elf_filename = elf_filename
@@ -226,15 +226,8 @@ class ELFDump:
 
                 if segm["p_filesz"]:
                     p_offset = segm["p_offset"]
-                    self.p2o_list.append((r_start, (r_end, p_offset)))
-                    self.o2p_list.append((p_offset, (p_offset + (r_end - r_start), r_start)))
-                else:
-                    # device_name = "" # UNUSED
-                    for device in self.machine_data["MemoryMappedDevices"]: # Possible because NOTES always the first segment
-                        if device[0] == r_start:
-                            # device_name = device[1] # UNUSED
-                            break
-                    p2mmd_list.append((r_start, r_end))
+                    self.v2o_list.append((r_start, (r_end, p_offset)))
+                    self.o2v_list.append((p_offset, (p_offset + (r_end - r_start), r_start)))
         
         # Debug
         # self.p2o_list = p2o_list
@@ -242,13 +235,34 @@ class ELFDump:
         # self.p2mmd_list = p2mmd_list
 
         # Compact intervals
-        self.p2o_list = self._compact_intervals(self.p2o_list)
-        self.o2p_list = self._compact_intervals(self.o2p_list)
-        #p2mmd_list = self._compact_intervals_simple(p2mmd_list)
+        self.v2o_list = self._compact_intervals(self.v2o_list)
+        self.o2v_list = self._compact_intervals(self.o2v_list)
 
-        self.p2o = IMOffsets(*list(zip(*sorted(self.p2o_list))))
-        self.o2p = IMOffsets(*list(zip(*sorted(self.o2p_list))))
-        #self.p2mmd = IMSimple(*list(zip(*sorted(p2mmd_list))))
+        self.v2o = IMOffsets(*list(zip(*sorted(self.v2o_list))))
+        self.o2v = IMOffsets(*list(zip(*sorted(self.o2v_list))))
+
+        # TODO: refactor this...
+        newo2pvalues = []
+        newo2pkeys = []
+        for i in tuple(self.o2v.get_values()):
+            newo2pvalues.append(i[1][1])
+            newo2pkeys.append(i[0])
+
+        newo2p = {}
+        for i in range(len(newo2pvalues)):
+            newo2p[newo2pkeys[i]] = [newo2pvalues[i]]
+
+        result = []
+        keys = list(newo2p.keys())
+        
+        for i in range(len(keys) - 1):
+            key1 = keys[i]
+            key2 = keys[i + 1]
+            value = newo2p[key1]
+            result.append((key1, key2, tuple(value)))
+
+        self.o2v = IMOverlapping(result)
+
     
     def _compact_intervals_simple(self, intervals):
         """Compact intervals if pointer values are contiguos"""
@@ -294,7 +308,7 @@ class ELFDump:
     
     def in_ram(self, paddr, size=1):
         """Return True if the interval is completely in RAM"""
-        return self.p2o.contains(paddr, size)[0] == size
+        return self.v2o.contains(paddr, size)[0] == size
 
     def in_mmd(self, paddr, size=1):
         """Return True if the interval is completely in Memory mapped devices space"""
@@ -302,7 +316,7 @@ class ELFDump:
 
     def get_data(self, paddr, size):
         """Return the data at physical address (interval)"""
-        size_available, intervals = self.p2o.contains(paddr, size)
+        size_available, intervals = self.v2o.contains(paddr, size)
         if size_available != size:
             return bytes()
         
@@ -323,7 +337,7 @@ class ELFDump:
 
     def get_ram_regions(self):
         """Return all the RAM regions of the machine and the associated offset"""
-        return self.p2o.get_values()
+        return self.v2o.get_values()
 
     def get_mmd_regions(self):
         """Return all the Memory mapped devices intervals of the machine and the associated offset"""
@@ -367,7 +381,7 @@ class ELFDump:
             except: # End of File
                 pass
 
-            if self.o2p[p_offset] == -1:
+            if self.o2v[p_offset] == -1:
                 continue
 
             strings_offsets.append((value, p_offset))
@@ -911,9 +925,6 @@ class AddressTranslator:
     def export_virtual_memory_elf(self, elf_filename, kernel=False, only_executable=False, ignore_empties=True):
         """Create an ELF file containg the virtual address space of the kernel/process"""
         print("Convert dump to virtual addresses ELF...")
-
-        import time as t
-        t.sleep(15)
 
         with open(elf_filename, "wb") as elf_fd:
             # Create the ELF header and write it on the file
