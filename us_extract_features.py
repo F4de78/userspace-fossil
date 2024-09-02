@@ -386,7 +386,6 @@ def main():
     bm = create_bitmap(elf)
 
     # Produce a kernel VAS only ELF file
-    dest_path = "/home/f4de/uni/thesis/msc-thesis/test/extracted"
     print(f" {str(dest_path)} Export VAS ELF...")
     # export_virtual_memory_elf(elf, str(dest_path) + "/extracted_kernel.elf", False, False)
     ghidra_path = os.getenv("GHIDRA_PATH")
