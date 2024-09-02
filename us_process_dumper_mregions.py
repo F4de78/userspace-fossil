@@ -41,7 +41,6 @@ def dump_process(pid: int):
         architecture = 'x86_64'
     print(f"Architecture: {architecture}")
     little_endian = True if "little" in gdbmi.write("show endian")[1]["payload"] else False
-    print(f"Endianess: {"Little" if little_endian else "Big"}")
     elf_h = make_elf_header(architecture, little_endian)
 
     # Dump registers
