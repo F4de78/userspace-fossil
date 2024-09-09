@@ -96,7 +96,6 @@ def dump_process(pid: int):
 
     # Write headers
     dump_fd.write(elf_h + program_h + machine_note)
-
     
     # Dump memory regions
     line_no = 0
@@ -115,6 +114,9 @@ def dump_process(pid: int):
         os.remove(path + "aux" + str(line_no))
         fifo_fd.close()
 
+    # used for dynamic analysis later    
+    core_dump_out = gdbmi.write("gcore "+path+"core.elf")
+    
     dump_fd.close()
     # Unfreeze the machine and close monitors
     gdbmi.exit()
@@ -122,7 +124,6 @@ def dump_process(pid: int):
         os.remove(path + "dump_fifo")
     except FileNotFoundError:
         pass
-
     print("Done!")
     exit(0)
 
