@@ -178,157 +178,6 @@ def create_bitmap(elf):
     mem_btm.pack(elf.elf_buf.tobytes())
     return mem_btm
 
-def export_virtual_memory_elf(elf, elf_filename, kernel=False, only_executable=False, ignore_empties=True):
-        """Create an ELF file containg the virtual address space of the kernel/process"""
-        print(f"Adjust dump for pointers extraction in ELF {elf_filename}...")
-
-        with open(elf_filename, "wb") as elf_fd:
-            # Create the ELF header and write it on the file
-            machine_data = elf.get_machine_data()
-            endianness = machine_data["Endianness"]
-            machine = machine_data["Architecture"].lower()
-
-            # Create ELF main header
-            if "aarch64" in machine:
-                e_machine = 0xB7
-            elif "arm" in machine:
-                e_machine = 0x28
-            elif "riscv" in machine:
-                e_machine = 0xF3
-            elif "x86_64" in machine:
-                e_machine = 0x3E
-            elif "386" in machine:
-                e_machine = 0x03
-            else:
-                raise Exception("Unknown architecture")
-
-            e_ehsize = 0x40
-            e_phentsize = 0x38
-            elf_h = bytearray(e_ehsize)
-            elf_h[0x00:0x04] = b'\x7fELF'                                   # Magic
-            elf_h[0x04] = 2                                                 # Elf type
-            elf_h[0x05] = 1 if endianness == "little" else 2                # Endianness
-            elf_h[0x06] = 1                                                 # Version
-            elf_h[0x10:0x12] = 0x4.to_bytes(2, endianness)                  # e_type
-            elf_h[0x12:0x14] = e_machine.to_bytes(2, endianness)            # e_machine
-            elf_h[0x14:0x18] = 0x1.to_bytes(4, endianness)                  # e_version
-            elf_h[0x34:0x36] = e_ehsize.to_bytes(2, endianness)             # e_ehsize
-            elf_h[0x36:0x38] = e_phentsize.to_bytes(2, endianness)          # e_phentsize
-            elf_fd.write(elf_h)
-
-            # For each pmask try to compact intervals in order to reduce the number of segments
-            intervals = defaultdict(list)
-            page_size = 4096 
-            print(elf.v2o.get_values())
-            for addr in elf.v2o.get_values(): # TODO: need to convert mappings to something that we have 
-                
-                
-                intervals.append([(addr, addr+page_idx)]) # Ignore MMD
-
-                intervals.sort()
-
-                # Compact them
-                fused_intervals = []
-                prev_begin = prev_end = prev_offset = -1
-                begin = 0
-                for interval in intervals:
-                    begin = interval[0]
-                    end = interval[1]
-                    phy = interval[2]
-                    
-
-                    offset = elf.p2o[phy]
-                    if offset == -1:
-                        continue
-
-                    if prev_end == begin and prev_offset + (prev_end - prev_begin) == offset:
-                        prev_end = end
-                    else:
-                        fused_intervals.append([prev_begin, prev_end, prev_offset])
-                        prev_begin = begin
-                        prev_end = end
-                        prev_offset = offset
-                
-                if prev_begin != begin:
-                    fused_intervals.append([prev_begin, prev_end, prev_offset])
-                else:
-                    offset = elf.p2o[phy]
-                    if offset == -1:
-                        print(f"ERROR!! {phy}")
-                    else:
-                        fused_intervals.append([begin, end, offset])
-                intervals = sorted(fused_intervals[1:], key=lambda x: x[1] - x[0], reverse=True)
-            # Write segments in the new file and fill the program header
-            p_offset = len(elf_h)
-            offset2p_offset = {} # Slow but more easy to implement (best way: a tree sort structure able to be updated)
-            e_phnum = 0
-            
-            for pmask, interval_list in intervals.items():
-                e_phnum += len(interval_list)
-                for idx, interval in enumerate(interval_list):
-                    begin, end, offset = interval
-                    size = end - begin
-                    if offset not in offset2p_offset:
-                        elf_fd.write(elf.get_data_raw(offset, size))
-                        if not elf.get_data_raw(offset, size):
-                            print(hex(offset), hex(size))
-                        new_offset = p_offset 
-                        p_offset += size
-                        for page_idx in range(0, size, elf.minimum_page):
-                            offset2p_offset[offset + page_idx] = new_offset + page_idx
-                    else:
-                        new_offset = offset2p_offset[offset]
-                    interval_list[idx].append(new_offset) # Assign the new offset in the dest file
-                
-            # Create the program header containing all the segments (ignoring not in RAM pages)
-            e_phoff = elf_fd.tell()
-            p_header = bytes()
-            for pmask, interval_list in intervals.items():
-                for begin, end, offset, p_offset in interval_list:
-                    
-                    # Workaround Ghidra 32 bit
-                    if end == 0xFFFFFFFF + 1 and e_machine == 0x03:
-                        end = 0xFFFFFFFF
-                    
-                    p_filesz = end - begin
-
-                    segment_entry = bytearray(e_phentsize)
-                    segment_entry[0x00:0x04] = 0x1.to_bytes(4, endianness)          # p_type
-                    segment_entry[0x04:0x08] = pmask.to_bytes(4, endianness)        # p_flags
-                    segment_entry[0x10:0x18] = begin.to_bytes(8, endianness)        # p_vaddr
-                    segment_entry[0x18:0x20] = offset.to_bytes(8, endianness)       # p_paddr Original offset
-                    segment_entry[0x28:0x30] = p_filesz.to_bytes(8, endianness)     # p_memsz
-                    segment_entry[0x08:0x10] = p_offset.to_bytes(8, endianness)     # p_offset
-                    segment_entry[0x20:0x28] = p_filesz.to_bytes(8, endianness)     # p_filesz
-
-                    p_header += segment_entry
-
-            # Write the segment header
-            elf_fd.write(p_header)
-            s_header_pos = elf_fd.tell() # Last position written (used if we need to write segment header)
-
-            # Modify the ELF header to point to program header
-            elf_fd.seek(0x20)
-            elf_fd.write(e_phoff.to_bytes(8, endianness))             # e_phoff
-
-            # If we have more than 65535 segments we have create a special Section entry contains the
-            # number of program entry (as specified in ELF64 specifications)
-            if e_phnum < 65536:
-                elf_fd.seek(0x38)
-                elf_fd.write(e_phnum.to_bytes(2, endianness))         # e_phnum
-            else:
-                elf_fd.seek(0x28)
-                elf_fd.write(s_header_pos.to_bytes(8, endianness))    # e_shoff
-                elf_fd.seek(0x38)
-                elf_fd.write(0xFFFF.to_bytes(2, endianness))          # e_phnum
-                elf_fd.write(0x40.to_bytes(2, endianness))            # e_shentsize
-                elf_fd.write(0x1.to_bytes(2, endianness))             # e_shnum
-
-                section_entry = bytearray(0x40)
-                section_entry[0x2C:0x30] = e_phnum.to_bytes(4, endianness)  # sh_info
-                elf_fd.seek(s_header_pos)
-                elf_fd.write(section_entry)
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('dump_elf', help='Memory dump in ELF format', type=str)
@@ -381,7 +230,7 @@ def main():
         else:
             word_fmt = np.dtype("<u8")
 
-    dmap, rptr = retrieve_pointers(elf,wordsize,word_fmt)
+    dmap, rmap = retrieve_pointers(elf,wordsize,word_fmt)
     strings = retrieve_strings(elf,rptr)
     bm = create_bitmap(elf)
 
@@ -389,9 +238,9 @@ def main():
     print(f" {str(dest_path)} Export VAS ELF...")
     # export_virtual_memory_elf(elf, str(dest_path) + "/extracted_kernel.elf", False, False)
     ghidra_path = os.getenv("GHIDRA_PATH")
-    # if not ghidra_path:
-    #     print("Error: GHIDRA_PATH not set!")
-    #     return(1)
+    if not ghidra_path:
+        print("Error: GHIDRA_PATH not set!")
+        return(1)
     # Collect addresses from static analysis
     print("Start static analysis...")
     out_filename = f"{str(dest_path)}.json"
@@ -432,8 +281,8 @@ def main():
     print("Saving features...")
     dump(elf.v2o, str(dest_path) + "/extracted_v2o.lzma")
     dump(elf.o2v, str(dest_path) + "/extracted_o2v.lzma")
-    dump(dmap, str(dest_path) + "/extracted_ptrs.lzma") # not sure if 'dmap' it si what we want
-    dump(rptr, str(dest_path) + "/extracted_rptrs.lzma")
+    dump(dmap, str(dest_path) + "/extracted_ptrs.lzma") # self.ptrs = dmap
+    dump(rmap, str(dest_path) + "/extracted_rptrs.lzma") # self.rptrs = rmap
     dump(strings, str(dest_path) + "/extracted_strs.lzma")
     dump(bm, str(dest_path) + "/extracted_btm.lzma")
     dump(xrefs_data, str(dest_path) + "/extracted_xrefs.lzma")
