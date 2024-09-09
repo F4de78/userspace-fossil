@@ -230,7 +230,7 @@ def main():
         else:
             word_fmt = np.dtype("<u8")
 
-    dmap, rmap = retrieve_pointers(elf,wordsize,word_fmt)
+    dmap, rptr = retrieve_pointers(elf,wordsize,word_fmt)
     strings = retrieve_strings(elf,rptr)
     bm = create_bitmap(elf)
 
@@ -250,7 +250,7 @@ def main():
     print(f"Ghidra Processor: {processor}")
     ghidra_cmd = os.path.join(ghidra_path, 'support/analyzeHeadless') \
                  + f" /tmp/ ghidra_project_{random.randint(0, 1000000)}" \
-                 + f" -import {str(dest_path)}/dump.elf" \
+                 + f" -import {str(dest_path)}/core.elf" \
                  + f" -processor {processor}" \
                  + f" -scriptPath {os.path.join(os.path.dirname(__file__),'ghidra')}" \
                  + f" -postScript export_xrefs.py {out_filename}"
@@ -282,7 +282,7 @@ def main():
     dump(elf.v2o, str(dest_path) + "/extracted_v2o.lzma")
     dump(elf.o2v, str(dest_path) + "/extracted_o2v.lzma")
     dump(dmap, str(dest_path) + "/extracted_ptrs.lzma") # self.ptrs = dmap
-    dump(rmap, str(dest_path) + "/extracted_rptrs.lzma") # self.rptrs = rmap
+    dump(rptr, str(dest_path) + "/extracted_rptrs.lzma") # self.rptrs = rmap
     dump(strings, str(dest_path) + "/extracted_strs.lzma")
     dump(bm, str(dest_path) + "/extracted_btm.lzma")
     dump(xrefs_data, str(dest_path) + "/extracted_xrefs.lzma")
