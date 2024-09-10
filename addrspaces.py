@@ -241,28 +241,38 @@ class ELFDump:
         self.v2o = IMOffsets(*list(zip(*sorted(self.v2o_list))))
         self.o2v = IMOffsets(*list(zip(*sorted(self.o2v_list))))
 
+        logging.debug("o2v pre:")
+        for addr in self.o2v.get_values():
+            logging.debug(addr)
+
         # TODO: refactor this...
-        newo2pvalues = []
-        newo2pkeys = []
-        for i in tuple(self.o2v.get_values()):
-            newo2pvalues.append(i[1][1])
-            newo2pkeys.append(i[0])
+        # newo2pvalues = []
+        # newo2pkeys = []
+        # for i in tuple(self.o2v.get_values()):
+        #     newo2pvalues.append(i[1][1])
+        #     newo2pkeys.append(i[0])
 
-        newo2p = {}
-        for i in range(len(newo2pvalues)):
-            newo2p[newo2pkeys[i]] = [newo2pvalues[i]]
+        # newo2p = {}
+        # for i in range(len(newo2pvalues)):
+        #     newo2p[newo2pkeys[i]] = [newo2pvalues[i]]
 
-        result = []
-        keys = list(newo2p.keys())
+        # result = []
+        # keys = list(newo2p.keys())
         
-        for i in range(len(keys) - 1):
-            key1 = keys[i]
-            key2 = keys[i + 1]
-            value = newo2p[key1]
-            result.append((key1, key2, tuple(value)))
+        # for i in range(len(keys) - 1):
+        #     key1 = keys[i]
+        #     key2 = keys[i + 1]
+        #     value = newo2p[key1]
+        #     result.append((key1, key2, tuple(value)))
 
-        self.o2v = IMOverlapping(result)
+        # self.o2v = IMOverlapping(result)
 
+        newo2v = {i[0]: [i[1][1]] for i in self.o2v.get_values()}
+        logging.debug(newo2v)
+        keys = list(newo2v.keys())
+
+        self.o2v = IMOverlapping([(keys[i], keys[i + 1], tuple(newo2v[keys[i]])) for i in range(len(keys) - 1)])
+        #self.o2v = newo2v
     
     def _compact_intervals_simple(self, intervals):
         """Compact intervals if pointer values are contiguos"""

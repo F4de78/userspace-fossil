@@ -201,7 +201,8 @@ def main():
         return(1)
 
     # Load the ELF file and parse it
-
+    # import time as t
+    # t.sleep(15)
     print("Reading virtspace from ELF dump...")
     elf = ELFDump(args.dump_elf)
 
