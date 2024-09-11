@@ -232,6 +232,9 @@ def main():
             word_fmt = np.dtype("<u8")
 
     dmap, rptr = retrieve_pointers(elf,wordsize,word_fmt)
+    logging.debug("dmap:")
+    for k, v in dmap.items():
+        logging.debug(f"{hex(k)} -> {hex(v)}")
     strings = retrieve_strings(elf,rptr)
     bm = create_bitmap(elf)
 
