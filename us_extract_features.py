@@ -254,7 +254,7 @@ def main():
     print(f"Ghidra Processor: {processor}")
     ghidra_cmd = os.path.join(ghidra_path, 'support/analyzeHeadless') \
                  + f" /tmp/ ghidra_project_{random.randint(0, 1000000)}" \
-                 + f" -import {str(dest_path)}/core.elf" \
+                 + f" -import {str(dest_path)}/dump.elf" \
                  + f" -processor {processor}" \
                  + f" -scriptPath {os.path.join(os.path.dirname(__file__),'ghidra')}" \
                  + f" -postScript export_xrefs.py {out_filename}"
