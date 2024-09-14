@@ -29,6 +29,8 @@ def subprocess_check_output_strip(cmd: str):
 def find_pointers_align(elf, wordsize, align, word_fmt):
     """For a fixed align retrieve all valid pointers in dump"""
 
+    #t.sleep(15)
+
     # Workaround for alignment
     aligned_len = elf.elf_buf.shape[0] - (elf.elf_buf.shape[0] % wordsize)
 
@@ -58,6 +60,7 @@ def find_pointers_align(elf, wordsize, align, word_fmt):
         #     continue
 
         # Validate srcs
+
         if len(srcs_list := elf.o2v[int(srcs_offsets[idx])]) > 0:
             for src in srcs_list:
                 ptrs[src] = dst
@@ -208,11 +211,11 @@ def main():
 
     logging.debug("virtual addr:")
     for addr in elf.v2o.get_values():
-        logging.debug(addr)
+        logging.debug((hex(addr[0]),(hex(addr[1][0]),hex(addr[1][1]))))
 
     logging.debug("virtual addr offsets:")
     for offset in elf.o2v.get_values():
-        logging.debug(offset)
+        logging.debug((hex(offset[0]), [hex(h) for h in offset[1]]))
 
     # wordsize value changes depending on the architecture 
     wordsize = 8 if "64" in elf.get_machine_data()["Architecture"] else 4 
@@ -230,6 +233,8 @@ def main():
             word_fmt = np.dtype(">u8")
         else:
             word_fmt = np.dtype("<u8")
+    
+    print("wordsize:",wordsize, "word_type:",word_type, "word_fmt:",word_fmt)
 
     dmap, rptr = retrieve_pointers(elf,wordsize,word_fmt)
     logging.debug("dmap:")

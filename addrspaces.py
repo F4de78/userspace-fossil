@@ -144,6 +144,9 @@ class IMOverlapping:
             limit2changes[r][1].append(v)
         self.limits, changes = zip(*sorted(limit2changes.items()))
         
+        logging.debug(self.limits) 
+        logging.debug(changes)
+
         self.results = [[]]        
         s = set()
         offsets = {}
@@ -163,6 +166,7 @@ class IMOverlapping:
             
             res.clear()
             for k,v in offsets.items():
+                print(k,v)
                 res.extend([i + v for i in k])
             self.results.append(res.copy())
         
@@ -225,7 +229,7 @@ class ELFDump:
                 r_end = r_start + segm["p_memsz"]
 
                 if segm["p_filesz"]:
-                    p_offset = segm["p_offset"]
+                    p_offset = segm["p_offset"] - 0x5
                     self.v2o_list.append((r_start, (r_end, p_offset)))
                     self.o2v_list.append((p_offset, (p_offset + (r_end - r_start), r_start)))
         
@@ -242,10 +246,11 @@ class ELFDump:
         self.o2v = IMOffsets(*list(zip(*sorted(self.o2v_list))))
 
         logging.debug("o2v pre:")
-        for addr in self.o2v.get_values():
-            logging.debug(addr)
+        for offset in self.o2v.get_values():
+            logging.debug((hex(offset[0]),(hex(offset[1][0]),hex(offset[1][1]))))
 
-        # TODO: refactor this...
+
+        # # TODO: refactor this...
         # newo2pvalues = []
         # newo2pkeys = []
         # for i in tuple(self.o2v.get_values()):
@@ -259,19 +264,40 @@ class ELFDump:
         # result = []
         # keys = list(newo2p.keys())
         
-        # for i in range(len(keys) - 1):
+        # for i in range(len(keys)):
         #     key1 = keys[i]
         #     key2 = keys[i + 1]
         #     value = newo2p[key1]
         #     result.append((key1, key2, tuple(value)))
 
-        # self.o2v = IMOverlapping(result)
+        """
+        intervals = []
+        for pmask, mapping_p in mapping.items():
+            if pmask[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
+                continue
+            intervals.extend([(x[0], x[0]+x[1], x[2], pmask) for x in mapping_p if not x[3]]) # Ignore MMD
+        intervals.sort()
+        """
+        
+        intervals = []
+        for i in self.o2v.get_values():
+            intervals.extend([(i[0], i[1][0] , tuple([i[1][1]]))])
+        intervals.sort()    
 
-        newo2v = {i[0]: [i[1][1]] for i in self.o2v.get_values()}
-        logging.debug(newo2v)
-        keys = list(newo2v.keys())
+        logging.debug([(hex(i[0]),hex(i[1]),hex(i[2][0])) for i in intervals])
 
-        self.o2v = IMOverlapping([(keys[i], keys[i + 1], tuple(newo2v[keys[i]])) for i in range(len(keys) - 1)])
+        self.o2v = IMOverlapping(intervals)
+
+        # newo2v = {i[0]: [i[1][1]] for i in self.o2v.get_values()}
+        # logging.debug(newo2v)
+        # keys = list(newo2v.keys())
+
+        # self.o2v = IMOverlapping([(keys[i], keys[i + 1], tuple(newo2v[keys[i]])) for i in range(len(keys) - 1)])
+
+        # logging.debug([hex(i) for i in self.o2v.limits])
+        # logging.debug(self.o2v.results)
+
+
         #self.o2v = newo2v
     
     def _compact_intervals_simple(self, intervals):
