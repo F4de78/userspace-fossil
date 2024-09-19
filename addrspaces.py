@@ -200,13 +200,42 @@ class ELFDump:
             # Parse the ELF file
             self.__read_elf_file(elf_fd)
 
+    def _compact_intervals_virt_offset(self, intervals):
+        """Compact intervals if virtual addresses and offsets values are
+        contigous (virt -> offset)"""
+        fused_intervals = []
+        prev_begin = prev_end = prev_offset = -1
+        for interval in intervals:
+            begin, end, phy, _ = interval
+            offset = self.v2o[phy]
+            if offset == -1:
+                continue
+
+            if prev_end == begin and prev_offset + (prev_end - prev_begin) == offset:
+                prev_end = end
+            else:
+                fused_intervals.append((prev_begin, (prev_end, prev_offset)))
+                prev_begin = begin
+                prev_end = end
+                prev_offset = offset
+        
+        if prev_begin != begin:
+            fused_intervals.append((prev_begin, (prev_end, prev_offset)))
+        else:
+            offset = self.v2o[phy]
+            if offset == -1:
+                print(f"ERROR!! {phy}")
+            else:
+                fused_intervals.append((begin, (end, offset)))
+        return fused_intervals[1:]
+
     def __read_elf_file(self, elf_fd):
         """Parse the dump in ELF format"""
         p2mmd_list = []
         elf_file = ELFFile(elf_fd)
 
         for segm in elf_file.iter_segments():
-
+            print(hex(segm.header.p_vaddr) + " " + hex(segm.header.p_vaddr + segm.header.p_memsz))
             # NOTES
             if isinstance(segm, NoteSegment):
                 for note in segm.iter_notes():
@@ -229,7 +258,7 @@ class ELFDump:
                 r_end = r_start + segm["p_memsz"]
 
                 if segm["p_filesz"]:
-                    p_offset = segm["p_offset"] - 0x5
+                    p_offset = segm["p_offset"]
                     self.v2o_list.append((r_start, (r_end, p_offset)))
                     self.o2v_list.append((p_offset, (p_offset + (r_end - r_start), r_start)))
         
@@ -239,15 +268,39 @@ class ELFDump:
         # self.p2mmd_list = p2mmd_list
 
         # Compact intervals
-        self.v2o_list = self._compact_intervals(self.v2o_list)
-        self.o2v_list = self._compact_intervals(self.o2v_list)
 
-        self.v2o = IMOffsets(*list(zip(*sorted(self.v2o_list))))
-        self.o2v = IMOffsets(*list(zip(*sorted(self.o2v_list))))
+        print("v2o_list")
+        print([(hex(x[0]), (hex(x[1][0]),hex(x[1][1]))) for x in self.v2o_list])
+        print("o2v_list")
+        print([(hex(x[0]), (hex(x[1][0]),hex(x[1][1]))) for x in self.o2v_list])
 
-        logging.debug("o2v pre:")
-        for offset in self.o2v.get_values():
-            logging.debug((hex(offset[0]),(hex(offset[1][0]),hex(offset[1][1]))))
+        # self.v2o_list = self._compact_intervals(self.v2o_list)
+        # self.o2v_list = self._compact_intervals(self.o2v_list)
+
+        intervals = []
+        for i in self.v2o_list:
+            intervals.append((i[0], i[1][0], 0, 0))
+        intervals.sort()    
+
+        fused_v2o = self._compact_intervals_virt_offset(intervals)
+
+        self.v2o = IMOffsets(*list(zip(*sorted(fused_v2o))))
+        # self.o2v = IMOffsets(*list(zip(*sorted(self.o2v_list))))
+
+        self.o2v = IMOverlapping(intervals)
+
+
+        """
+        intervals = []
+        for pmask, mapping_p in mapping.items():
+            if pmask[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
+                continue
+            intervals.extend([(x[0], x[0]+x[1], x[2], pmask) for x in mapping_p if not x[3]]) # Ignore MMD
+        intervals.sort()
+        """
+        # logging.debug("o2v pre:")
+        # for offset in self.o2v.get_values():
+        #     logging.debug((hex(offset[0]),(hex(offset[1][0]),hex(offset[1][1]))))
 
 
         # # TODO: refactor this...
@@ -270,23 +323,15 @@ class ELFDump:
         #     value = newo2p[key1]
         #     result.append((key1, key2, tuple(value)))
 
-        """
-        intervals = []
-        for pmask, mapping_p in mapping.items():
-            if pmask[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
-                continue
-            intervals.extend([(x[0], x[0]+x[1], x[2], pmask) for x in mapping_p if not x[3]]) # Ignore MMD
-        intervals.sort()
-        """
         
-        intervals = []
-        for i in self.o2v.get_values():
-            intervals.extend([(i[0], i[1][0] , tuple([i[1][1]]))])
-        intervals.sort()    
+        # intervals = []
+        # for i in self.v2o.get_values():
+        #     intervals.extend([(i[0], i[1][0] , tuple([i[1][1]]))])
+        # intervals.sort()    
 
-        logging.debug([(hex(i[0]),hex(i[1]),hex(i[2][0])) for i in intervals])
+        # logging.debug([(hex(i[0]),hex(i[1]),hex(i[2][0])) for i in intervals])
 
-        self.o2v = IMOverlapping(intervals)
+        # self.o2v = IMOverlapping(intervals)
 
         # newo2v = {i[0]: [i[1][1]] for i in self.o2v.get_values()}
         # logging.debug(newo2v)
