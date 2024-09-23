@@ -77,26 +77,33 @@ class ELFDump:
                     self.v2o_list.append((r_start, (r_end, p_offset)))
                     self.o2v_list.append((p_offset, (p_offset + (r_end - r_start), r_start)))
 
-def extract_pointers(memory_region, pointer_size, pointer_format, valid_offset):
+def extract_pointers(memory_region, pointer_size, pointer_format, valid_offset, offset):
     valid_pointers = []
     for i in range(0, len(memory_region), pointer_size):
             # Extract pointer-sized data chunk from the memory region
+
             chunk = memory_region[i:i + pointer_size]
             
             # Ensure we have a full pointer-sized chunk
             if len(chunk) != pointer_size:
                 continue
+
+            # check if pointer is aligned
+            if i % pointer_size != 0:
+                continue
             
             # Unpack the chunk into an integer (pointer) using little-endian format
             pointer_value = struct.unpack(pointer_format, chunk)[0]
             
+            # Check if the pointer is aligned
+            if pointer_value % pointer_size != 0:
+                continue
+
             # Check if the pointer is within the valid range
             if valid_offset[0] <= pointer_value <= valid_offset[1]:
-                # Check if the pointer value is a valid index into the memory region (i.e., where it points)
-                target_address = pointer_value
-                #if 0 <= target_address < len(memory_region):
-                    # Add the pointer and where it points
-                valid_pointers.append((i, target_address))
+                # Check if the pointer is not pointing to itself
+                if offset + i != pointer_value:
+                    valid_pointers.append((i, pointer_value))
     return valid_pointers
 
 def read_memory_at_address(memory_region, address, offset, num_bytes):
@@ -124,7 +131,7 @@ def save_pointers(ptrs:dict, segments_intervals:list, pointer_size:int, pointer_
         # print("")
         # print(memory_data[region[2]:region[2]+region[3]])
         mem_region_data = memory_data[region[2]:region[2]+region[3]]
-        valid_pointers.extend(extract_pointers(mem_region_data, pointer_size, pointer_format, (region[0], region[1])))
+        valid_pointers.extend(extract_pointers(mem_region_data, pointer_size, pointer_format, (region[0], region[1]), region[0]))
         valid_pointers.sort()
         
         n_ptrs = 0
