@@ -10,6 +10,7 @@ from compress_pickle import dump, load
 from addrspaces import ELFDump, get_virtspace
 import functools
 import logging
+import extract_pointers
 from threading import Timer
 import os
 import signal
@@ -25,68 +26,6 @@ from bitarray import bitarray
 
 def subprocess_check_output_strip(cmd: str):
     return subprocess.check_output(cmd.split(), stderr=subprocess.STDOUT).strip().decode(errors='ignore')
-
-def find_pointers_align(elf, wordsize, align, word_fmt):
-    """For a fixed align retrieve all valid pointers in dump"""
-
-    #t.sleep(15)
-
-    # Workaround for alignment
-    aligned_len = elf.elf_buf.shape[0] - (elf.elf_buf.shape[0] % wordsize)
-
-    if align == 0:
-        end = aligned_len
-    else:
-        end = aligned_len - (wordsize - align)
-
-    # Find all destination addresses which could be valid kernel addresses ignoring too
-    # little or too big ones (src -> dst)
-    word_array = elf.elf_buf[align:end].view(word_fmt)
-    min_virt, max_virt = elf.v2o.get_extremes()
-    logging.debug(f"Min virtual address: {hex(min_virt)}, Max virtual address: {hex(max_virt)}") 
-    dsts_idx = np.where((word_array >= min_virt) & (word_array <= max_virt))[0]
-    dsts = word_array[dsts_idx]
-    srcs_offsets = (dsts_idx * wordsize) + align # This array contains the offset on the file of the dst candidates (the src of the pointer!)
-    ptrs = {}
-
-    for idx, dst in enumerate(tqdm(dsts)):
-        # Validate 
-        dst = int(dst) # All this conversion is due to a numpy "feature" https://github.com/numpy/numpy/issues/5745
-        if (dsto := elf.v2o[dst]) == -1:
-            continue
-
-        # # Heuristic: ignore pointers which point in pages full of zeroes (FP?)
-        # if ((dsto >> self.shifts[-1]) << self.shifts[-1]) in null_pages:
-        #     continue
-
-        # Validate srcs
-
-        if len(srcs_list := elf.o2v[int(srcs_offsets[idx])]) > 0:
-            for src in srcs_list:
-                ptrs[src] = dst
-    
-    return ptrs
-
-
-def retrieve_pointers(elf, wordsize, word_fmt):
-    print("Retrieve pointers...")
-    dmap = {}                # virt1 -> virt2        location virt1 point to virt2 one-to-one
-    rmap = defaultdict(list) # virt2 -> [virt1, ...] location at virt2 is pointed by [virt1, ...] one-to-many
-
-    # Monothread not super optimized but it's fast :D (thanks Matteo)
-    ptrs = {}
-
-    for align in range(wordsize):
-        print(f"Look for pointers with alignement {align}...")
-        p = find_pointers_align(elf, wordsize, align, word_fmt)
-        print(f"Found {len(p)} new pointers")
-        ptrs.update(p)
-    # Reconstruct dict
-    dmap.update(ptrs)
-    for src, dst in ptrs.items():
-        rmap[dst].append(src)
-
-    return dmap, rmap
 
 def retrieve_strings(elf, rptrs, min_len=3, max_symbols_threshold=0.3):
     # Get strings with physical addresses [(string, paddr), ...]
@@ -236,7 +175,9 @@ def main():
     
     print("wordsize:",wordsize, "word_type:",word_type, "word_fmt:",word_fmt)
 
-    dmap, rptr = retrieve_pointers(elf,wordsize,word_fmt)
+    #dmap, rptr = retrieve_pointers(elf,wordsize,word_fmt)
+    dmap = {}
+    extract_pointers.main()
     logging.debug("dmap:")
     for k, v in dmap.items():
         logging.debug(f"{hex(k)} -> {hex(v)}")

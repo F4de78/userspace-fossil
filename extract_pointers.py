@@ -33,6 +33,7 @@ class ELFDump:
         self.elf_buf = np.zeros(0, dtype=np.byte)
         self.elf_filename = elf_filename
         self.segments_intervals = []
+        self.elf_file = None
         
         with open(self.elf_filename, "rb") as elf_fd:
 
@@ -45,9 +46,9 @@ class ELFDump:
 
     def __read_elf_file(self, elf_fd):
         """Parse the dump in ELF format"""
-        elf_file = ELFFile(elf_fd)
+        self.elf_file = ELFFile(elf_fd)
 
-        for segm in elf_file.iter_segments():
+        for segm in self.elf_file.iter_segments():
             # NOTES
             if isinstance(segm, NoteSegment):
                 for note in segm.iter_notes():
@@ -62,8 +63,8 @@ class ELFDump:
 
                     # Suppose only one deadcode note
                     self.machine_data = json.loads(note["n_desc"].strip(b'\x00')) #fix: removes trailing \x00
-                    self.machine_data["Endianness"] = "little" if elf_file.header["e_ident"].EI_DATA == "ELFDATA2LSB" else "big"
-                    self.machine_data["Architecture"] = "_".join(elf_file.header["e_machine"].split("_")[1:])
+                    self.machine_data["Endianness"] = "little" if self.elf_file.header["e_ident"].EI_DATA == "ELFDATA2LSB" else "big"
+                    self.machine_data["Architecture"] = "_".join(self.elf_file.header["e_machine"].split("_")[1:])
             else:
                 # Fill arrays needed to translate physical addresses to file offsets
                 r_start = segm["p_vaddr"]
@@ -112,33 +113,8 @@ def read_memory_at_address(memory_region, address, offset, num_bytes):
     print(hex(address))
     return memory_region[address:address + num_bytes]
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('dump_elf', help='Process memory dump in ELF format', type=str)
-    parser.add_argument('dest_prefix', help='Prefix for the output files')
-    args = parser.parse_args()
-
-    dest_path = Path(args.dest_prefix)
-    if not dest_path.exists():
-        print("Destination path does not exist")
-        return(1)
-    # Load the ELF file and parse it
-    # import time as t
-    # t.sleep(15)
-    print("[+] Reading ELF dump...")
-    elf = ELFDump(args.dump_elf)
-
-    #print([(hex(intervals[0]),hex(intervals[1])) for intervals in elf.segments_intervals])
-
-    pointer_size = 4 
-    pointer_format = '<I' if pointer_size == 4 else '<Q'
-    
-    # Loop through the memory data, reading one potential pointer at a time
-    
-    memory_data = elf.elf_buf
-    # Extract pointers from the memory data
-    ptrs = {}
-    for region, i in zip(elf.segments_intervals, range(len(elf.segments_intervals))):
+def save_pointers(ptrs:dict, segments_intervals:list, pointer_size:int, pointer_format:str, memory_data:bytes):
+    for region, i in zip(segments_intervals, range(len(segments_intervals))):
         print(f"[+] Searching pointers in memory region {i}...")
         valid_pointers = []
         # print(" start addr: \t" + hex(region[0]) + "\n",\
@@ -157,6 +133,39 @@ def main():
             print(f"\t ptr at 0x{region[0] + pointer_address:08X} -> 0x{target_address:08X}")
             ptrs[region[0] + pointer_address] = target_address
         print(f"[+] Found {n_ptrs} pointers in memory region {i}.")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('dump_elf', help='Process memory dump in ELF format', type=str)
+    parser.add_argument('dest_prefix', help='Prefix for the output files')
+    args = parser.parse_args()
+
+    dest_path = Path(args.dest_prefix)
+    if not dest_path.exists():
+        print("Destination path does not exist")
+        return(1)
+
+    print("[+] Reading ELF dump...")
+    elf = ELFDump(args.dump_elf)
+
+    #print([(hex(intervals[0]),hex(intervals[1])) for intervals in elf.segments_intervals])
+
+    arch = elf.elf_file.get_machine_arch()
+    if arch == "x86":
+        pointer_size = 4
+    elif arch == "x64":
+        pointer_size = 8
+    else:
+        print("Architecture not yet supported")
+        return(1)
+    pointer_format = '<I' if pointer_size == 4 else '<Q'
+    memory_data = elf.elf_buf
+
+    # Extract pointers from the memory data
+    ptrs = {}
+    save_pointers(ptrs, elf.segments_intervals, pointer_size, pointer_format, memory_data)
+    
     print(f"[+] Found {len(ptrs)} pointers in total.")
     print(f"[+] Saving extracted pointers to {str(dest_path)}/extracted_ptrs.lzma")
     dump(ptrs, str(dest_path) + "/extracted_ptrs.lzma") 

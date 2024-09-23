@@ -187,9 +187,9 @@ class ELFDump:
         self.o2v = None   # RAM (ELF offset) to Physical
         self.v2o_list = []   # Physical to RAM (ELF offset)
         self.o2v_list = []   # RAM (ELF offset) to Physical
-        self.p2mmd = None # Physical to Memory Mapped Devices (ELF offset)
         self.elf_buf = np.zeros(0, dtype=np.byte)
         self.elf_filename = elf_filename
+        self.segments_intervals = []
         
         with open(self.elf_filename, "rb") as elf_fd:
 
@@ -200,42 +200,11 @@ class ELFDump:
             # Parse the ELF file
             self.__read_elf_file(elf_fd)
 
-    def _compact_intervals_virt_offset(self, intervals):
-        """Compact intervals if virtual addresses and offsets values are
-        contigous (virt -> offset)"""
-        fused_intervals = []
-        prev_begin = prev_end = prev_offset = -1
-        for interval in intervals:
-            begin, end, phy, _ = interval
-            offset = self.v2o[phy]
-            if offset == -1:
-                continue
-
-            if prev_end == begin and prev_offset + (prev_end - prev_begin) == offset:
-                prev_end = end
-            else:
-                fused_intervals.append((prev_begin, (prev_end, prev_offset)))
-                prev_begin = begin
-                prev_end = end
-                prev_offset = offset
-        
-        if prev_begin != begin:
-            fused_intervals.append((prev_begin, (prev_end, prev_offset)))
-        else:
-            offset = self.v2o[phy]
-            if offset == -1:
-                print(f"ERROR!! {phy}")
-            else:
-                fused_intervals.append((begin, (end, offset)))
-        return fused_intervals[1:]
-
     def __read_elf_file(self, elf_fd):
         """Parse the dump in ELF format"""
-        p2mmd_list = []
         elf_file = ELFFile(elf_fd)
 
         for segm in elf_file.iter_segments():
-            print(hex(segm.header.p_vaddr) + " " + hex(segm.header.p_vaddr + segm.header.p_memsz))
             # NOTES
             if isinstance(segm, NoteSegment):
                 for note in segm.iter_notes():
@@ -257,8 +226,10 @@ class ELFDump:
                 r_start = segm["p_vaddr"]
                 r_end = r_start + segm["p_memsz"]
 
+
                 if segm["p_filesz"]:
                     p_offset = segm["p_offset"]
+                    self.segments_intervals.append((r_start, r_end, p_offset, segm["p_filesz"]))
                     self.v2o_list.append((r_start, (r_end, p_offset)))
                     self.o2v_list.append((p_offset, (p_offset + (r_end - r_start), r_start)))
         
