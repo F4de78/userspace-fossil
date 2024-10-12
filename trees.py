@@ -13,9 +13,6 @@ import script_utils
 from chains import distance_threshold, PointerSet, within_threshold
 import ctypes
 
-POINTER_DTYPE = np.uint64
-POINTER_SIZE = 8
-
 try:
     from itertools import pairwise
 except ImportError:  # python < 3.10
@@ -111,8 +108,8 @@ def non_unique_in_first(arrays):
     first, *others = arrays
     mask = np.concatenate([[False], first[:-1] == first[1:], [False]])
     non_unique = mask[:-1] | mask[1:]
-    first = first[non_unique[0]]
-    return get_boundaries(first), itertools.chain([first], (a[non_unique[0]] for a in others))
+    first = first[non_unique]
+    return get_boundaries(first), itertools.chain([first], (a[non_unique] for a in others))
 
 
 def tree_distance_threshold(o0, o1, o2t):
@@ -125,16 +122,21 @@ def tree_distance_threshold(o0, o1, o2t):
     """
     return max(o2t[o0], o2t[o1], abs(o1 - o0) + POINTER_SIZE, 2 * POINTER_SIZE + 1)
 
-
+# processes a hierarchical structure of trees, merges nodes based on their offsets 
+# and distance thresholds, and returns a dictionary of nodes that meet the specified criteria. The use of defaultdict 
+# ensures that the result dictionary is initialized correctly, and the function leverages NumPy and custom functions 
+# to perform the necessary calculations and merges.
 def one_higher(trees, ptrs, o2t):
     res = defaultdict(dict)
     for offsets, trees_dict in trees.items():
         o0, o1 = offsets
         threshold = tree_distance_threshold(o0, o1, o2t)
+        # check if a node has children
         for mid in trees_dict:
             l, r = ptrs[mid + o0], ptrs[mid + o1]
             if l not in trees_dict or r not in trees_dict:
                 continue
+            # merge found trees
             nodes = snp.kway_merge(np.array([mid]), trees_dict[l], trees_dict[r], duplicates=snp.KEEP)
             if np.min(np.diff(nodes)) < threshold:
                 continue
@@ -158,7 +160,6 @@ def len_two_chains(offsets, pointer_set):
     res = res[np.argsort(res[:, 1], kind='mergesort')]
     return sort_using_first(res.T, 'stable')
 
-
 def height_one_trees(len2_chains, o2t):
     # TODO non-binary trees should make computation explode, it seems not obvious to find a solution
     boundaries, (roots, offsets, children) = non_unique_in_first(len2_chains)
@@ -174,7 +175,7 @@ def height_one_trees(len2_chains, o2t):
             offset_l = offsets[i]
             left_child = children[i]
             for j in range(i + 1, b):
-                assert roots[j] == mid
+                assert roots[j] == mid   
                 offset_r = offsets[j]
                 assert offset_l < offset_r, (offset_l, offset_r)
                 if abs(offset_r - offset_l) < POINTER_SIZE:
@@ -240,9 +241,13 @@ def main():
     global POINTER_DTYPE, POINTER_SIZE
     parser = script_utils.setup_arg_parser()
     args = parser.parse_args()
+    
     if args.offset_step == 4:
         POINTER_DTYPE = np.uint32
         POINTER_SIZE = 4
+    else:
+        POINTER_DTYPE = np.uint64
+        POINTER_SIZE = 8
 
     script_utils.setup_logging(args)
     offsets = script_utils.offsets(args)
@@ -251,6 +256,7 @@ def main():
     for i, t in zip(itertools.count(1), find_trees(offsets, pointer_set)):
         res.append([(o, np.fromiter(d, POINTER_DTYPE)) for o, d in t.items()])
         logging.info(f'{sum(len(x) for x in t.values()):,} {i}-height binary trees ({len(t):,} offset pairs)')
+
     compress_pickle.dump(res, args.output)
 
 

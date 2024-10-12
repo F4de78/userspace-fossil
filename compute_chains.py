@@ -6,6 +6,7 @@ from multiprocessing import Pool
 import os
 import os.path
 import sys
+import shutil as shutils
 
 from compress_pickle import load, dump
 
@@ -26,7 +27,9 @@ def fmt_percentage(ratio, fixed_width=False):
 
 def compute_chain_graph(offset):
     g = ChainGraph(pointer_set, offset)
-    dump(g, os.path.join(args.dest, f'{offset}.lz4'))
+    # becuase otherwise the output files would start with a '-'
+    out_name = f'm{abs(offset)}' if int(offset) < 0 else f'{offset}'
+    dump(g, os.path.join(args.dest, f'{out_name}.lz4'))
     if args.stats:
         counter, sizes = g.topology_counters()
         return Stats(offset, g.num_vertices(), g.num_edges(), counter, sizes)
@@ -71,8 +74,11 @@ def main():
 
     print(f"{len(pointer_set):,} pointers [{fmt_percentage(aligned_src)} sources "
           f"and {fmt_percentage(aligned_dst)} destinations aligned]")
-
-    os.mkdir(args.dest)
+    try:
+        os.mkdir(args.dest)
+    except FileExistsError:
+        shutils.rmtree(args.dest)
+        os.mkdir(args.dest)
     offsets = range(args.min_offset, args.max_offset + 1, args.offset_step)
     with Pool() as p:
         if args.stats:

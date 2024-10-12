@@ -143,9 +143,6 @@ class IMOverlapping:
             limit2changes[l][0].append(v)
             limit2changes[r][1].append(v)
         self.limits, changes = zip(*sorted(limit2changes.items()))
-        
-        logging.debug(self.limits) 
-        logging.debug(changes)
 
         self.results = [[]]        
         s = set()
@@ -166,7 +163,6 @@ class IMOverlapping:
             
             res.clear()
             for k,v in offsets.items():
-                print(k,v)
                 res.extend([i + v for i in k])
             self.results.append(res.copy())
         
@@ -177,7 +173,6 @@ class IMOverlapping:
 
     def get_values(self):
         return zip(self.limits, self.results)
-
 
 class ELFDump:
     def __init__(self, elf_filename):
@@ -190,6 +185,7 @@ class ELFDump:
         self.elf_buf = np.zeros(0, dtype=np.byte)
         self.elf_filename = elf_filename
         self.segments_intervals = []
+        self.elf_file = None
         
         with open(self.elf_filename, "rb") as elf_fd:
 
@@ -202,9 +198,9 @@ class ELFDump:
 
     def __read_elf_file(self, elf_fd):
         """Parse the dump in ELF format"""
-        elf_file = ELFFile(elf_fd)
+        self.elf_file = ELFFile(elf_fd)
 
-        for segm in elf_file.iter_segments():
+        for segm in self.elf_file.iter_segments():
             # NOTES
             if isinstance(segm, NoteSegment):
                 for note in segm.iter_notes():
@@ -219,8 +215,8 @@ class ELFDump:
 
                     # Suppose only one deadcode note
                     self.machine_data = json.loads(note["n_desc"].strip(b'\x00')) #fix: removes trailing \x00
-                    self.machine_data["Endianness"] = "little" if elf_file.header["e_ident"].EI_DATA == "ELFDATA2LSB" else "big"
-                    self.machine_data["Architecture"] = "_".join(elf_file.header["e_machine"].split("_")[1:])
+                    self.machine_data["Endianness"] = "little" if self.elf_file.header["e_ident"].EI_DATA == "ELFDATA2LSB" else "big"
+                    self.machine_data["Architecture"] = "_".join(self.elf_file.header["e_machine"].split("_")[1:])
             else:
                 # Fill arrays needed to translate physical addresses to file offsets
                 r_start = segm["p_vaddr"]
@@ -240,27 +236,19 @@ class ELFDump:
 
         # Compact intervals
 
-        print("v2o_list")
-        print([(hex(x[0]), (hex(x[1][0]),hex(x[1][1]))) for x in self.v2o_list])
-        print("o2v_list")
-        print([(hex(x[0]), (hex(x[1][0]),hex(x[1][1]))) for x in self.o2v_list])
+        # print("v2o_list")
+        # print([(hex(x[0]), (hex(x[1][0]),hex(x[1][1]))) for x in self.v2o_list])
+        # print("o2v_list")
+        # print([(hex(x[0]), (hex(x[1][0]),hex(x[1][1]))) for x in self.o2v_list])
 
-        # self.v2o_list = self._compact_intervals(self.v2o_list)
-        # self.o2v_list = self._compact_intervals(self.o2v_list)
+        self.v2o_list = self._compact_intervals(self.v2o_list)
+        self.o2v_list = self._compact_intervals(self.o2v_list)
 
-        intervals = []
-        for i in self.v2o_list:
-            intervals.append((i[0], i[1][0], 0, 0))
-        intervals.sort()    
+        self.o2v = IMOffsets(*list(zip(*self.o2v_list)))
+        self.v2o = IMOffsets(*list(zip(*self.v2o_list)))
 
-        fused_v2o = self._compact_intervals_virt_offset(intervals)
-
-        self.v2o = IMOffsets(*list(zip(*sorted(fused_v2o))))
-        # self.o2v = IMOffsets(*list(zip(*sorted(self.o2v_list))))
-
-        self.o2v = IMOverlapping(intervals)
-
-
+        for limit, result in self.o2v.get_values():
+            print(f"Limit: {limit}, Result: {result}")
         """
         intervals = []
         for pmask, mapping_p in mapping.items():
@@ -304,17 +292,13 @@ class ELFDump:
 
         # self.o2v = IMOverlapping(intervals)
 
-        # newo2v = {i[0]: [i[1][1]] for i in self.o2v.get_values()}
-        # logging.debug(newo2v)
-        # keys = list(newo2v.keys())
+        newo2v = {i[0]: [i[1][1]] for i in self.o2v.get_values()}
+        keys = list(newo2v.keys())
 
-        # self.o2v = IMOverlapping([(keys[i], keys[i + 1], tuple(newo2v[keys[i]])) for i in range(len(keys) - 1)])
-
-        # logging.debug([hex(i) for i in self.o2v.limits])
-        # logging.debug(self.o2v.results)
+        self.o2v = IMOverlapping([(keys[i], keys[i + 1], tuple(newo2v[keys[i]])) for i in range(len(keys) - 1)])
 
 
-        #self.o2v = newo2v
+        # self.o2v = newo2v
     
     def _compact_intervals_simple(self, intervals):
         """Compact intervals if pointer values are contiguos"""
@@ -655,10 +639,8 @@ class AddressTranslator:
             #     continue
             intervals.extend([(x[0], x[0]+x[1], x[2], pmask) for x in mapping_p if not x[3]]) # Ignore MMD
         intervals.sort()
-        print(intervals)
         # Fuse intervals in order to reduce the number of elements to speed up
         fused_intervals_v2o = self._compact_intervals_virt_offset(intervals)
-        print(fused_intervals_v2o)
         fused_intervals_permissions = self._compact_intervals_permissions(intervals)
 
         # Offset to virtual is impossible to compact in a easy way due to the
@@ -699,13 +681,7 @@ class AddressTranslator:
             key2 = keys[i + 1]
             value = newo2p[key1]
             result.append((key1, key2, tuple(value)))
-        
-        print(result)
-
-        import time as t
-        #t.sleep(15)
-        # print(newo2p)
-
+    
         self.o2v = IMOverlapping(result)
         self.pmasks = IMData(*list(zip(*fused_intervals_permissions)))
 

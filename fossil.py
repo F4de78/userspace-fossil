@@ -10,6 +10,7 @@ from binarytree import build as buildtree
 from statistics import mean, StatisticsError
 from collections import Counter, defaultdict
 import textwrap
+import style
 
 
 finder_parser = argparse.ArgumentParser()
@@ -49,57 +50,23 @@ zero_parser.add_argument("-r", "--referenced", action="store_true", help="Only r
 
 class FossilShell(Cmd):
     def __init__(self, path):
-        dinosaur = "\n\
-            :ymMMmy/`\n\
-            /MMMMMMMMNy/`                                                                     ```\n\
-            -NMMMMMMMMMMMms-                                                       `-/+oydNNNNMMMMNmdy/.\n\
-            :hMMMMMMMMMMMMMNo-`                                               ./smMMMMMMMMMMMMMMMMMMMMMmo`\n\
-            :NMMMMMMMMMMMMMMMdo`                                          /hMMMMMMMMMMMMMmys+////+ohmMMNo\n\
-                :mMMMMMMMMMMMMMMMMN:                                       +mMMMMMMMMMMNy+:`            `:+/\n\
-                .:yMMMMMMMMMMMMMMM/                                    :mMMMMMMMMMdo-\n\
-                    omMMMMMMMMMMMMMN/                                  sMMMMMMMMMh-\n\
-                    +mMMMMMMMMMMMMM:                               `yMMMMMMMMm-\n\
-                        oMMMMMMMMMMMMMh                              -dMMMMMMMMm.\n\
-                `+ydmmMMMMMMMMMMMMMMMN`                           `sMMMMMMMMMN.\n\
-            -yNMMMMMMMMMMMMMMMMMMMMN                          .sNMMMMMMMMMM/\n\
-        `-hyydNMMMMMMMMMMMMMMMMMMMMMMMm                        -yMMMMMMMMMMMMy\n\
-        NMMMMMMMMMMMMMMMMMMMMMMMMMMMMMN                 ./oyhdmMMMMMMMMMMMMMM:\n\
-        -hmmmmdyo+/:::::+dMMMMMMMMMMMMm          `` .ohNMMMMMMMMMMMMMMMMMMMM+\n\
-                        :NMMMMMMMMMMd  `/ydNNMMMMNMMMMMMMMMMMMMMMMMMMMMMMy\n\
-                /+//.      oMMMMMMMMMMMmdMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMm`\n\
-            ``.:mMMo     `mMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMd\n\
-            odNMMdyMMMy`    :MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMN`\n\
-            .odMMMMMMMMd`    hMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMN`\n\
-        `hdNMds+odMMMMd`   .mMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM-\n\
-                `yMMMMd`   -mMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM.\n\
-                    `:oNMm+:. `sMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMm\n\
-                        .hNMMMNhosMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM+\n\
-                        -hNMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMd`\n\
-                            :oydNMMhodMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMd`\n\
-                            -syysso+-`  `.sMMMMMMMMMMMMMMMMMMMMMMMMMMMm.\n\
-                        -dNMMNMMMMMMMNmhmMMMMMMMMMh`.-:/+o+NMMMMMMMMMMmo`\n\
-                        .. `+smMMMMMMMMNddddMMMMMMM-       dMMMMMMMMMMMMNm-\n\
-                            /mMMNsmMMy++-`    :dMMMMMs        sNMMMMMMMMMMMMm`\n\
-                            :No-.`dMM:           +NMMMN-        `-++:-:/+sdMMMd\n\
-                                /Mm+             +MMMMs                   hMMM+\n\
-                                sh`            `sMMMNs`                   +MMMm\n\
-                                        -oo/./mMMMy.                 :hdhhMMMh\n\
-                                        yNmMMMMMMMo                  .NhdMMMMM/\n\
-                                        `:yNMMMMN+                       :MMMMs\n\
-                                    :shNMMMMMMM+                      .yNMMMMM.\n\
-                                `sNMMMMMMMNNmh`                     :NMNNNMMd`\n\
-                                yNdyyso:.`                          ./`   :-\n\
-\t\t\t\t\t  ______                _  _ \n\
-\t\t\t\t\t |  ____|              (_)| |\n\
-\t\t\t\t\t | |__  ___   ___  ___  _ | |\n\
-\t\t\t\t\t |  __|/ _ \ / __|/ __|| || |\n\
-\t\t\t\t\t | |  | (_) |\__ \\\\__ \| || |\n\
-\t\t\t\t\t |_|   \___/ |___/|___/|_||_|\n\
-                             \n\
-                             "
+        dinosaur = """
+                       __
+                      / _)
+             _.----._/ /
+            /         /
+        __/ (  | (  |
+       /__.-'|_|--|_|
+ ______                _  _ \n\
+|  ____|              (_)| |\n\
+| |__  ___   ___  ___  _ | |\n\
+|  __|/ _ \ / __|/ __|| || |\n\
+| |  | (_) |\__ \\\\__ \| || |\n\
+|_|   \___/ |___/|___/|_||_|\n\
+          u s e r s p a c e \n"""
         Cmd.__init__(self)
         self.self_in_py = True
-        # self.intro = style(dinosaur, bold=True)#, fg=fg.black, bg=bg.white)
+        self.intro = style.blue(dinosaur, bold=True)
         self.prompt = 'fossil> '
         self.fossil = None
 

@@ -258,8 +258,7 @@ def main():
 
     # Brutal, based on extension
     print("Determine CPU features...")
-    elf_filename = glob.glob(args.data_dir + "/extracted_kernel.elf")
-    print(elf_filename)
+    elf_filename = glob.glob(args.data_dir + "core.elf")
     with open(list(elf_filename)[0], "rb") as f:
         elffile = ELFFile(f)
         if elffile.get_machine_arch() == 'x86': #  TODO: support other arch
@@ -281,13 +280,13 @@ def main():
     # Load datafiles
     print("Load data files...")
     elf_filename = list(elf_filename)[0]
-    ptrs = load_c(args.data_dir + "/extracted_ptrs.lzma")
-    v2o = load_c(args.data_dir + "/extracted_v2o.lzma")
-    btm = load_c(args.data_dir + "/extracted_btm.lzma")
-    # rptrs = load_c(args.data_dir + "/extracted_rptrs.lzma")
-    strings = load_c(args.data_dir + "/extracted_strs.lzma")
-    dlists_raw = load_c(args.data_dir + "/dll.lzma")
-    roots_raw = load_c(args.data_dir + "/trees.lzma")
+    ptrs = load_c(args.data_dir + "extracted_ptrs.lzma")
+    v2o = load_c(args.data_dir + "extracted_v2o.lzma")
+    btm = load_c(args.data_dir + "extracted_btm.lzma")
+    rptrs = load_c(args.data_dir + "extracted_rptrs.lzma")
+    strings = load_c(args.data_dir + "extracted_strs.lzma")
+    dlists_raw = load_c(args.data_dir + "extracted_dll.lzma")
+    roots_raw = load_c(args.data_dir + "extracted_trees.lzma")
     xrefs = [x for x in set(load_c(args.data_dir + "/extracted_xrefs.lzma")) if x in ptrs and x not in strings] # Consider Pointers only
     xrefs = set(xrefs)
     functions = set(load_c(args.data_dir + "/extracted_functions.lzma"))
@@ -305,8 +304,10 @@ def main():
         not_degenerate[offset] = [x for x in cicles[offset] if not x.is_degenerate]
     
     top_offset = sorted([(len(l),k) for k,l in not_degenerate.items()], reverse=True)
+    already_assigned = []
     if top_offset == []:
         top_dlink = []
+        already_assigned = set(already_assigned)
         print("No double linked lists found")
     else:
         top_offset = top_offset[0][1]

@@ -107,7 +107,6 @@ class PointerSet:
 
     def __init__(self, pointers: Dict[int, int]):
         src, dst = ptr_array(pointers.keys()), ptr_array(pointers.values())
-
         # remove self-pointers
         non_self = src != dst
         src, dst = src[non_self], dst[non_self]
