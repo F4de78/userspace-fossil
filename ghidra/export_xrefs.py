@@ -4,6 +4,29 @@ from ghidra.util.task import TaskMonitor
 from ghidra.program.model.listing import Instruction
 import json
 import ctypes
+"""
+This script exports cross-references (xrefs) and function entry points from a Ghidra program to a JSON file.
+The script performs the following steps:
+1. Retrieves the output filename from the script arguments.
+2. Initializes the current program and a SimpleBlockModel for basic block analysis.
+3. Iterates over all symbols in the program's symbol table to identify valid symbols that:
+    - Are of type LABEL.
+    - Have a memory address.
+    - Have references.
+    - Are not instructions.
+    - Are contained within code blocks that have either sources or destinations.
+4. Collects these valid symbols and their addresses.
+5. Iterates over all functions in the program to collect their entry points.
+6. Dumps the collected symbols and functions into a JSON file specified by the output filename.
+Args:
+     None (script arguments are retrieved using getScriptArgs()).
+Raises:
+     SystemExit: If the output filename is not provided in the script arguments.
+Output:
+     A JSON file containing two dictionaries:
+     - valid_symbols: A dictionary mapping symbol names to their addresses.
+     - functions: A dictionary mapping function names to their entry points.
+"""
 
 args = getScriptArgs()
 if len(args) < 1:

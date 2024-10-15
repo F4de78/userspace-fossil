@@ -126,7 +126,7 @@ def determine_unique_cicles(sibling_list, threshold=0.9):
     return unique_structs
 
 def shape_string(x):
-    x.determine_shape(fake=False)
+    x.determine_shape(max_offset = 512, fake=True)
     x.find_strings()
     # x.find_timestamps() 
     # x.find_ips()  
@@ -134,7 +134,7 @@ def shape_string(x):
 
 def characterize_list(x):
     x = LinkedList(list(x), (0,), False)
-    x.determine_shape(fake=False)
+    x.determine_shape(max_offset = 512, fake=True)
     x.find_strings()
     # x.find_timestamps() 
     # x.find_ips()  
@@ -167,7 +167,7 @@ def find_lists(xref):
 
         if len(ptr_list) >= 3:
             ll = LinkedList(ptr_list, (offset,), loop)
-            ll.determine_shape()
+            ll.determine_shape(max_offset = 512, fake=True)
             ll.find_strings()
             # ll.find_ips()  
             if ll.embedded_strs.values() or ll.pointed_strs.values():
@@ -294,7 +294,7 @@ def main():
     # Prepare MemoryObject class
     MemoryObject.prepare(ptrs, ptr_size, v2o, btm, strings, xrefs, functions, elf_filename)
 
-    # Extract linear and cicles
+    # Extract linear and cicles doubly linked list
     print("Convert linear and cicles double linked lists...")
     cicles = convert_linear_cicles(dlists_raw)
 
@@ -363,7 +363,9 @@ def main():
         top_trees.sort(key=lambda x: x.levels, reverse=True)
         print(f"Top offset in trees: {top_offset_trees}, {len(top_trees)}/{len(final_trees)}")
         trees = top_trees
-        
+
+    # arrays of strings
+
     print("Find array of strings...")
     candidates = {x for x in ptrs if ptrs[x] in strings}
     strings_arrays = [PtrsArray(x) for x in find_ptrs_arrays(candidates)]
@@ -374,7 +376,7 @@ def main():
     ptrs_autofree = {k:v for k,v in ptrs.items() if k != v and k not in already_assigned}
     ptrs_arrays_raw = find_ptrs_arrays(ptrs_autofree)
     
-    # print("Determine size of structs pointed by an array of pointers")
+    print("Determine size of structs pointed by an array of pointers")
     with Pool() as pool:
         ptrs_array = pool.map(define_array_obj, filter(lambda x:xrefs.intersection(x), ptrs_arrays_raw))
     ptrs_array = list(filter(lambda x: x is not None, ptrs_array))

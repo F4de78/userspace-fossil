@@ -8,15 +8,18 @@ def main():
     data_dir = "../msc-thesis/us-dump/test/extracted"
 
     data = load_c(f'{data_dir}/results.lzma')
-    # pprint([ hex(ptr) for  ptr in data['arrays_strings'][2].__dict__['ptrs_list']])
-    pointed_strings = data['linears'][0].__dict__['pointed_strs'][-40]
-    pprint([hex(ptr) for ptr in pointed_strings])
+
     # c = 0
     # for trees in data['trees']:
     #     print(f"Tree #{c}")
     #     pprint(trees.__dict__)
     #     pprint([hex(p) for p in trees.__dict__['ptrs_list']])
     #     c += 1
+
+    # searched_tree = data['trees'][0].__dict__['embedded_strs'][-32]
+    # pprint([hex(s) for s in searched_tree])
+
+    pprint(data['trees'][0].__dict__)
 
 
 

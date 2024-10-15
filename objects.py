@@ -197,8 +197,9 @@ class PointersGroup(MemoryObject):
 
         return latest_negative, latest_positive
 
-    def determine_shape(self, max_offset: int=8192, near_threshold: float=0.9, autostruct_threshold: float=0.9, align_threshold: float=0.5, fake=False):
-        self.find_near_pointers(max_offset, near_threshold)  # A this point the structure is stimated to have a maximum size of mode_distance but we don't know anything about the alignment (we have a window of [-mode, mode] bytes)
+    def determine_shape(self, max_offset: int=512, near_threshold: float=0.9, autostruct_threshold: float=0.9, align_threshold: float=0.5, fake=False):
+        self.find_near_pointers(max_offset, near_threshold)  
+        # A this point the structure is stimated to have a maximum size of mode_distance but we don't know anything about the alignment (we have a window of [-mode, mode] bytes)
         
         if fake:
             self.shape = (-max_offset//2, max_offset//2)
@@ -210,6 +211,7 @@ class PointersGroup(MemoryObject):
             # structure, in that case we can recover exactly where the structure
             # start and a maxium size (the mode distance)
             possible_start, autostructural_offsets = self.identify_struct_start(max_offset, autostruct_threshold)
+            print("struct start: ", possible_start, " - autostructural offset: ", autostructural_offsets)
             if autostructural_offsets:
                 self.autostructural_offsets = autostructural_offsets
                 # self.shape = (possible_start, self.mode_distance)
@@ -291,7 +293,7 @@ class PointersGroup(MemoryObject):
         self.mode_distance = mode_distance
         self.near_ptrs_threshold = threshold
 
-    def identify_struct_start(self, max_offset=8192, threshold=0.9):
+    def identify_struct_start(self, max_offset, threshold=0.9):
         """
         Identify possible exact start of the structure using pointers which point to
         the start of other structure of the same topology (example struct
@@ -419,7 +421,6 @@ class PointersGroup(MemoryObject):
                     break
                 
                 embded_strs[diff].append(self.strs_sorted[idx])
-
 
         real_threshold = min(len_base_ptrs - 1, threshold * len_base_ptrs)
         for offset, collected_strs in pointed_strs.items():

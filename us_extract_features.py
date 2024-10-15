@@ -208,9 +208,9 @@ def main():
             convf = lambda x: ctypes.c_uint64(x).value
         else:
             convf = lambda x: ctypes.c_uint32(x).value
-        xrefs_data = [convf(x) for x in xrefs_data.values() if elf.v2o[convf(x)] != -1]
+        xrefs_data = [convf(x) for x in xrefs_data.values()]
         xrefs_data = set(xrefs_data)
-        functions = [convf(x) for x in functions.values() if elf.v2o[convf(x)] != -1]
+        functions = [convf(x) for x in functions.values()]
         functions = set(functions)
 
         print(f"[!] Found {len(xrefs_data)} xrefs and {len(functions)} functions")
