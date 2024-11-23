@@ -126,7 +126,7 @@ def determine_unique_cicles(sibling_list, threshold=0.9):
     return unique_structs
 
 def shape_string(x):
-    x.determine_shape(max_offset = 512, fake=True)
+    x.determine_shape(max_offset = 1024, fake=False)
     x.find_strings()
     # x.find_timestamps() 
     # x.find_ips()  
@@ -134,7 +134,7 @@ def shape_string(x):
 
 def characterize_list(x):
     x = LinkedList(list(x), (0,), False)
-    x.determine_shape(max_offset = 512, fake=True)
+    x.determine_shape(max_offset = 1024, fake=False)
     x.find_strings()
     # x.find_timestamps() 
     # x.find_ips()  
@@ -167,7 +167,7 @@ def find_lists(xref):
 
         if len(ptr_list) >= 3:
             ll = LinkedList(ptr_list, (offset,), loop)
-            ll.determine_shape(max_offset = 512, fake=True)
+            ll.determine_shape()
             ll.find_strings()
             # ll.find_ips()  
             if ll.embedded_strs.values() or ll.pointed_strs.values():

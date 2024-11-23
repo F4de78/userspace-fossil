@@ -197,7 +197,7 @@ class PointersGroup(MemoryObject):
 
         return latest_negative, latest_positive
 
-    def determine_shape(self, max_offset: int=512, near_threshold: float=0.9, autostruct_threshold: float=0.9, align_threshold: float=0.5, fake=False):
+    def determine_shape(self, max_offset: int=1024, near_threshold: float=0.9, autostruct_threshold: float=0.9, align_threshold: float=0.5, fake=False):
         self.find_near_pointers(max_offset, near_threshold)  
         # A this point the structure is stimated to have a maximum size of mode_distance but we don't know anything about the alignment (we have a window of [-mode, mode] bytes)
         
@@ -242,7 +242,7 @@ class PointersGroup(MemoryObject):
 
         self.function_ptrs_offset = {offset for offset in self.valid_near_offsets if self.near_ptrs[offset][0].intersection(self.functions)}
 
-    def find_near_pointers(self, max_offset: int=8192, threshold: float=0.9):
+    def find_near_pointers(self, max_offset: int=1024, threshold: float=0.9):
         """
         Considering all the pointers in base_ptrs as pointers contained in the same
         type of structure, it returns a dictionary with the offsets and all

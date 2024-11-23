@@ -140,19 +140,25 @@ def main():
         print("Destination path does not exist")
         return(1)
     
-    cpu_info = Path(args.cpu_info)
-    if not cpu_info.exists():
-        print("Destination path does not exist")
-        return(1)
-    with open(args.cpu_info) as f:
-        cpu_infos = json.load(f)
+    # cpu_info = Path(args.cpu_info)
+    # if not cpu_info.exists():
+    #     print("Destination path does not exist")
+    #     return(1)
+    # with open(args.cpu_info) as f:
+    #     cpu_infos = json.load(f)
 
     print("[*] Reading ELF dump")
     # Load the ELF file and parse it
     elf = ELFDump(args.dump_elf)
+    
+    endianness = "little" if elf.elf_file.header["e_ident"].EI_DATA == "ELFDATA2LSB" else "big"
+    arch = "_".join(elf.elf_file.header["e_machine"].split("_")[1:]).lower()
+
+    print(f"[*] Endianness: {endianness}")
+    print(f"[*] Architecture: {arch}")
 
     # wordsize value changes depending on the architecture 
-    wordsize = 8 if "64" in cpu_infos['architecture'] else 4 
+    wordsize = 8 if "64" in endianness else 4 
     word_fmt = '<I' if wordsize == 4 else '<Q'
 
     # Extract pointers from the memory data
@@ -174,7 +180,7 @@ def main():
     print(f"[!] Found {len(ptrs)} pointers")
 
     print("[*] Retrieving strings")
-    strings = retrieve_strings(elf,cpu_infos['endianness'],rptr)
+    strings = retrieve_strings(elf,endianness,rptr)
     print(f"[!] Found {len(strings)} strings")
     print("[*] Creating bitmap")
     bm = create_bitmap(elf)
@@ -186,7 +192,6 @@ def main():
     # Collect addresses from static analysis
     print("[*] Start Ghidra static analysis...")
     out_filename = f"{str(dest_path)}.json"
-    arch = cpu_infos['architecture']
     processor = f"x86:LE:{wordsize * 8}:default -cspec gcc" if "x86" in arch or "386" in arch else f"AARCH64:LE:{wordsize * 8}:v8A -cspec default" # Support only X86 and AARCH64 
     logging.debug(f"Ghidra Processor: {processor}")
     ghidra_cmd = os.path.join(ghidra_path, 'support/analyzeHeadless') \
@@ -195,6 +200,7 @@ def main():
                  + f" -processor {processor}" \
                  + f" -scriptPath {os.path.join(os.path.dirname(__file__),'ghidra')}" \
                  + f" -postScript export_xrefs.py {out_filename}"
+    print(ghidra_cmd)
     functions = []
     logging.debug(f"Running Ghidra command: {ghidra_cmd}")
     try:
@@ -214,6 +220,8 @@ def main():
         functions = set(functions)
 
         print(f"[!] Found {len(xrefs_data)} xrefs and {len(functions)} functions")
+
+        #print(functions)
 
     except subprocess.CalledProcessError as e:
         print("[!] Error in Ghidra static analysis!")

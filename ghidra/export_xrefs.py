@@ -59,6 +59,10 @@ funcs = fm.getFunctions(True)
 for func in funcs: 
     functions[func.getName()] = func.getEntryPoint().getUnsignedOffset()
 
+funcs = fm.getFunctions(True) # True means 'forward'
+for func in funcs: 
+    print("Function: {} @ 0x{}".format(func.getName(), func.getEntryPoint()))
+
 
 json.dump((valid_symbols, functions), open(out_filename, "w"))
 

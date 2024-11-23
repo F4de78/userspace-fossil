@@ -50,7 +50,7 @@ def dump_process(pid: int):
     machine_data = {"Architecture": architecture,
                     "Uptime": uptime,
                     "CPURegisters": registers,
-                    "MemoryMappedDevices": mem_regions_data
+                    "MemoryMappedDevices": []
                     }
 
     # Add custom values
