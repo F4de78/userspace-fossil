@@ -10,7 +10,6 @@ from binarytree import build as buildtree
 from statistics import mean, StatisticsError
 from collections import Counter, defaultdict
 import textwrap
-import style
 
 
 finder_parser = argparse.ArgumentParser()
@@ -66,7 +65,7 @@ class FossilShell(Cmd):
           u s e r s p a c e \n"""
         Cmd.__init__(self)
         self.self_in_py = True
-        self.intro = style.blue(dinosaur, bold=True)
+        #self.intro = style.blue(dinosaur, bold=True)
         self.prompt = 'fossil> '
         self.fossil = None
 

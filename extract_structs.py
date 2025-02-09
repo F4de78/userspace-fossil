@@ -149,7 +149,7 @@ def define_array_obj(x):
 def find_lists(xref):
     linked_lists = []
 
-    for offset in top_offset:
+    for offset in range(-max_size, max_size, ptr_size):
         ptr_list = []
         ptr_set = set()
         current_ptr = xref
@@ -252,14 +252,16 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('data_dir', type=str, help='Dataset directory')
+    parser.add_argument('dump_name', type=str, help='Name of the meomry dump')
     parser.add_argument("-max_size", type=int, default=8192, help="Maximum structure size")
     parser.add_argument("-debug", action="store_true", default=False)
+    parser.add_argument('--cross_reference', '-xref', help="Enable search for cross reference", default=False, action="store_true")
     args = parser.parse_args()
 
     # Brutal, based on extension
     print("Determine CPU features...")
-    elf_filename = glob.glob(args.data_dir + "core.elf")
-    with open(list(elf_filename)[0], "rb") as f:
+    elf_filename = glob.glob(args.data_dir + args.dump_name)
+    with open(elf_filename[0], "rb") as f:
         elffile = ELFFile(f)
         if elffile.get_machine_arch() == 'x86': #  TODO: support other arch
             convf = lambda x: ctypes.c_uint32(x).value
@@ -287,12 +289,16 @@ def main():
     strings = load_c(args.data_dir + "extracted_strs.lzma")
     dlists_raw = load_c(args.data_dir + "extracted_dll.lzma")
     roots_raw = load_c(args.data_dir + "extracted_trees.lzma")
-    xrefs = [x for x in set(load_c(args.data_dir + "/extracted_xrefs.lzma")) if x in ptrs and x not in strings] # Consider Pointers only
-    xrefs = set(xrefs)
-    functions = set(load_c(args.data_dir + "/extracted_functions.lzma"))
+    if args.cross_reference:
+        xrefs = [x for x in set(load_c(args.data_dir + "/extracted_xrefs.lzma")) if x in ptrs and x not in strings] # Consider Pointers only
+        xrefs = set(xrefs)
+        functions = set(load_c(args.data_dir + "/extracted_functions.lzma"))
 
     # Prepare MemoryObject class
-    MemoryObject.prepare(ptrs, ptr_size, v2o, btm, strings, xrefs, functions, elf_filename)
+    if args.cross_reference:
+        MemoryObject.prepare(ptrs, ptr_size, v2o, btm, strings, xrefs, functions, elf_filename)
+    else:
+        MemoryObject.prepare(ptrs, ptr_size, v2o, btm, strings, set(), set(), elf_filename)
 
     # Extract linear and cicles doubly linked list
     print("Convert linear and cicles double linked lists...")
@@ -303,25 +309,39 @@ def main():
     for offset in cicles.keys():
         not_degenerate[offset] = [x for x in cicles[offset] if not x.is_degenerate]
     
-    top_offset = sorted([(len(l),k) for k,l in not_degenerate.items()], reverse=True)
-    already_assigned = []
-    if top_offset == []:
-        top_dlink = []
-        already_assigned = set(already_assigned)
-        print("No double linked lists found")
-    else:
-        top_offset = top_offset[0][1]
-        top_dlink = not_degenerate[top_offset]
-        top_dlink.sort(key=lambda x: len(x.ptrs_list), reverse=True)
-        print(f"Top offset in cicles: {top_offset}, {len(top_dlink)}/{sum([len(x) for x in cicles.values()])}")
+    # top_offset = sorted([(len(l),k) for k,l in not_degenerate.items()], reverse=True)
+    # print("Top offsets in cicles", top_offset)
+    # already_assigned = []
+    # if top_offset == []:
+    #     top_dlink = []
+    #     already_assigned = set(already_assigned)
+    #     print("No double linked lists found")
+    # else:
+    #     top_offset = top_offset[0][1]
+    #     top_dlink = not_degenerate[top_offset]
+    #     top_dlink.sort(key=lambda x: len(x.ptrs_list), reverse=True)
+    #     print(f"Top offset in cicles: {top_offset}, {len(top_dlink)}/{sum([len(x) for x in cicles.values()])}")
     
-        for dlist in top_dlink:
-            already_assigned.extend(dlist.ptrs_list)
-            already_assigned.extend(dlist.ptrs_list_back)
-        already_assigned = set(already_assigned)
-        print("Determine linear/cicle double linked lists shapes and strings...")
-        with Pool() as pool:
-            top_dlink = pool.map(shape_string, top_dlink)
+    #     for dlist in top_dlink:
+    #         already_assigned.extend(dlist.ptrs_list)
+    #         already_assigned.extend(dlist.ptrs_list_back)
+    #     already_assigned = set(already_assigned)
+    #     print("Determine linear/cicle double linked lists shapes and strings...")
+    #     with Pool() as pool:
+    #         top_dlink = pool.map(shape_string, top_dlink)
+    already_visited = []
+    top_offset = sorted([(len(l),k) for k,l in not_degenerate.items()], reverse=True)[0][1] 
+    top_dlink = not_degenerate[top_offset]
+    top_dlink.sort(key=lambda x: len(x.ptrs_list), reverse=True)
+    print(f"Top offset in cicles: {top_offset}, {len(top_dlink)}/{sum([len(x) for x in cicles.values()])}")
+    
+    for dlist in top_dlink:
+        already_assigned.extend(dlist.ptrs_list)
+        already_assigned.extend(dlist.ptrs_list_back)
+    already_assigned = set(already_assigned)
+    print("Determine linear/cicle double linked lists shapes and strings...")
+    with Pool() as pool:
+        top_dlink = pool.map(shape_string, top_dlink)
 
     # Convert trees (only trees with at least 2 levels)
     print("Convert trees...")
@@ -355,21 +375,21 @@ def main():
 
     
     top_offset_trees = [x.dests_offsets for x in final_trees if x.levels == final_trees[0].levels]
-    if top_offset_trees == []:
-        print("No trees found")
-    else:
+    print("Top offset in trees", top_offset_trees)
+    if top_offset_trees != []:
         top_offset_trees = Counter([x.dests_offsets for x in final_trees if x.levels == final_trees[0].levels]).most_common(1)[0][0] #Counter(weighted_offsets).most_common(1)[0][0] #Counter([x.dests_offsets for x in final_trees]).most_common(1)[0][0]
         top_trees = [x for x in final_trees if x.dests_offsets == top_offset_trees]
         top_trees.sort(key=lambda x: x.levels, reverse=True)
         print(f"Top offset in trees: {top_offset_trees}, {len(top_trees)}/{len(final_trees)}")
         trees = top_trees
+    print(f"Total trees: {len(trees)}")
 
     # arrays of strings
 
     print("Find array of strings...")
     candidates = {x for x in ptrs if ptrs[x] in strings}
     strings_arrays = [PtrsArray(x) for x in find_ptrs_arrays(candidates)]
-    print(f"Found {len(strings_arrays)} arrays of strings")
+    print(f"Total arrays of strings: {len(strings_arrays)}")
 
     # Slow.. (OOM for haiku)
     print("Find pointers arrays...")
@@ -377,18 +397,26 @@ def main():
     ptrs_arrays_raw = find_ptrs_arrays(ptrs_autofree)
     
     print("Determine size of structs pointed by an array of pointers")
-    with Pool() as pool:
-        ptrs_array = pool.map(define_array_obj, filter(lambda x:xrefs.intersection(x), ptrs_arrays_raw))
+    if args.cross_reference:
+        with Pool() as pool:
+            ptrs_array = pool.map(define_array_obj, filter(lambda x:xrefs.intersection(x), ptrs_arrays_raw))
+    else:
+        with Pool() as pool:
+            ptrs_array = pool.map(define_array_obj, ptrs_arrays_raw)
     ptrs_array = list(filter(lambda x: x is not None, ptrs_array))
-    print(f"Found {len(ptrs_array)} arrays of pointers")
+    print(f"Total arrays of pointers: {len(ptrs_array)}")
 
     print("Find referenced linked lists...")
     linked_lists = []
-    # Find possbile near pointers to XREFs ones
-    candidates_list = [x for x in xrefs if x in ptrs and x not in already_assigned]
+
+    if args.cross_reference:
+        candidates_list = [x for x in xrefs if x in ptrs and x not in already_assigned]
+    else:
+        candidates_list = [x for x in ptrs if x not in already_assigned]
+
+    print(f"Total candidates: {len(candidates_list)}")
     with Pool() as pool:
         l = pool.map(find_lists, candidates_list)
-    linked_lists = []
     
     tmp = []
     for i in l:
@@ -418,8 +446,14 @@ def main():
 
     for struct_set, struct_name in [(cicles, "cicles"), (linears, "linears"), (trees, "trees"), ([x.structs for x in ptrs_array], "arrays"), (linked_lists, "lists")]:
         print(f"Determine first level derived structures for {struct_name}...")
-        with Pool() as pool:
-            d = pool.map(derive_structs, filter(lambda x: xrefs.intersection(x.ptrs_list), struct_set))
+        if struct_name == "trees" and struct_set == [[]]:
+            struct_set = struct_set[0]
+        if args.cross_reference:
+            with Pool() as pool:
+                d = pool.map(derive_structs, filter(lambda x: xrefs.intersection(x.ptrs_list), struct_set))
+        else:
+            with Pool() as pool:
+                d = pool.map(derive_structs, struct_set)
         for dd in d:
             derived[struct_name][0].extend(dd)
         print(f"Found {len(derived[struct_name][0])} derived structures")
@@ -433,13 +467,15 @@ def main():
 
     # Extract children lists
     children = {"cicles": [], "linears": [], "trees": [], "arrays": []}
+    print("Top offset ", top_offset)
     if top_offset == []:
         offset_min = 0
     else:
         offset_min = min(top_offset)
     for struct_set, struct_name in [(cicles, "cicles"), (linears, "linears"), (trees, "trees"), ([x.structs for x in ptrs_array], "arrays")]:
         print(f"Determine first level children lists for {struct_name}...")
-        
+        if struct_name == "trees" and struct_set == [[]]:
+            struct_set = struct_set[0]
         c = []
         p = set()
         for elem in struct_set:
@@ -479,7 +515,7 @@ def main():
         print(f"Found {len(children[struct_name])} derived children")
 
     print("Saving results...")
-    dump_c({"trees": trees, "cicles": cicles, "linears": linears, "arrays_strings": strings_arrays, "arrays": ptrs_array, "lists": linked_lists, "derived": derived, "children": children}, args.data_dir + "/results.lzma")
+    dump_c({"pointer_size":ptr_size, "trees": trees, "cicles": cicles, "linears": linears, "arrays_strings": strings_arrays, "arrays": ptrs_array, "lists": linked_lists, "derived": derived, "children": children}, args.data_dir + "/results.lzma")
 
 if __name__ == '__main__':
     main()

@@ -202,10 +202,15 @@ def search(graphs, min_size, pointer_set):
 def main():
     parser = script_utils.setup_arg_parser()
     parser.add_argument('--min-size', type=int, default=3, help="minimum length of chains")
+    parser.add_argument('--debug', help="Enable debug printer", default=False, action="store_true")
     args = parser.parse_args()
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
     script_utils.setup_logging(args)
+    print(f"-- args: {args}")
     pointer_set = script_utils.compute_pointer_set(args)
     graphs = script_utils.compute_chain_graphs(args, pointer_set)
+    print(f"-- graphs: {graphs}")
     res = search(graphs, args.min_size, pointer_set)
     for name, (match_list, ptr2match) in zip(["linear", "cycles"], res):
         n_matches = len(match_list)

@@ -197,7 +197,7 @@ class PointersGroup(MemoryObject):
 
         return latest_negative, latest_positive
 
-    def determine_shape(self, max_offset: int=1024, near_threshold: float=0.9, autostruct_threshold: float=0.9, align_threshold: float=0.5, fake=False):
+    def determine_shape(self, max_offset: int=2048, near_threshold: float=0.9, autostruct_threshold: float=0.9, align_threshold: float=0.5, fake=False):
         self.find_near_pointers(max_offset, near_threshold)  
         # A this point the structure is stimated to have a maximum size of mode_distance but we don't know anything about the alignment (we have a window of [-mode, mode] bytes)
         
@@ -211,7 +211,6 @@ class PointersGroup(MemoryObject):
             # structure, in that case we can recover exactly where the structure
             # start and a maxium size (the mode distance)
             possible_start, autostructural_offsets = self.identify_struct_start(max_offset, autostruct_threshold)
-            print("struct start: ", possible_start, " - autostructural offset: ", autostructural_offsets)
             if autostructural_offsets:
                 self.autostructural_offsets = autostructural_offsets
                 # self.shape = (possible_start, self.mode_distance)
@@ -421,7 +420,7 @@ class PointersGroup(MemoryObject):
                     break
                 
                 embded_strs[diff].append(self.strs_sorted[idx])
-
+    
         real_threshold = min(len_base_ptrs - 1, threshold * len_base_ptrs)
         for offset, collected_strs in pointed_strs.items():
             if len(collected_strs) >=  min(len(self.near_ptrs[offset]) - 1, threshold * len(self.near_ptrs[offset])) and len(collected_strs) > 2:

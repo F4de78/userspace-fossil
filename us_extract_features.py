@@ -10,7 +10,6 @@ from compress_pickle import dump, load
 from addrspaces import ELFDump, get_virtspace
 import functools
 import logging
-import extract_pointers as ep
 from threading import Timer
 import os
 import signal
@@ -21,6 +20,8 @@ import numpy as np
 from pathlib import Path
 from string import ascii_uppercase, ascii_lowercase, digits
 from bitarray import bitarray
+from compress_pickle import load as load_c
+import struct
 
 
 
@@ -48,7 +49,7 @@ def retrieve_strings(elf, endianness, rptrs, min_len=3, max_symbols_threshold=0.
             if sum(not c.isalnum() for c in value)/len(value) >= max_symbols_threshold:
                 continue
             strings[vaddr] = value
-            print(f"file offset: {hex(offset)} \t vaddrs: {hex(vaddr)} \t value: {strings[vaddr]} ")
+            logging.debug(f"file offset: {hex(offset)} \t vaddrs: {hex(vaddr)} \t value: {strings[vaddr]} ")
 
             # in_rw = bool(self.pmasks[vaddr][0] & 0x2)
             # if in_rw:
@@ -119,17 +120,41 @@ def retrieve_strings_offsets(elf, endianness, min_len=3):
 def create_bitmap(elf):
     """Create a bitmap starting from the ELF file containing 0 if the byte
     is 0, 1 otherwise"""
-    print("Creating bitmap...")
     mem_btm = bitarray()
     mem_btm.pack(elf.elf_buf.tobytes())
     return mem_btm
+
+def extract_pointers(segments, memory_region, pointer_size, pointer_format, valid_offset, offset):
+    valid_pointers = []
+    for i in range(0, len(memory_region) - pointer_size + 1, pointer_size):
+        # check if pointer is aligned
+        if i % pointer_size != 0:
+            continue
+        # Extract pointer-sized data chunk from the memory region
+        chunk = memory_region[i:i + pointer_size]
+        # Ensure we have a full pointer-sized chunk
+        if len(chunk) != pointer_size:
+            continue
+        # Unpack the chunk into an integer (pointer) using little-endian format
+        pointer_value = struct.unpack(pointer_format, chunk)[0]
+        #check if the pointer points tho itself
+        if offset + i == pointer_value:
+            continue
+        # Check if the pointer is in a valid segment
+        for start, end, *_ in segments:
+            if start <= pointer_value <= end and valid_offset[0] <= pointer_value <= valid_offset[1]:
+                    valid_pointers.append((offset + i, pointer_value))
+    return valid_pointers
+
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('dump_elf', help='Memory dump in ELF format', type=str)
     parser.add_argument('cpu_info', help='json file with information about the CPU', type=str)
     parser.add_argument('dest_prefix', help='Prefix for the output files')
-    parser.add_argument('--debug', help="Enable debug printer", default=False, action="store_true")
+    parser.add_argument('--debug', help="Enable debug messages", default=False, action="store_true")
+    parser.add_argument('--cross_reference', '-xref', help="Enable search for cross reference", default=False, action="store_true")
+
     args = parser.parse_args()
 
     if args.debug:
@@ -147,29 +172,36 @@ def main():
     # with open(args.cpu_info) as f:
     #     cpu_infos = json.load(f)
 
-    print("[*] Reading ELF dump")
+    logging.debug("Reading ELF dump")
     # Load the ELF file and parse it
     elf = ELFDump(args.dump_elf)
     
     endianness = "little" if elf.elf_file.header["e_ident"].EI_DATA == "ELFDATA2LSB" else "big"
     arch = "_".join(elf.elf_file.header["e_machine"].split("_")[1:]).lower()
 
-    print(f"[*] Endianness: {endianness}")
-    print(f"[*] Architecture: {arch}")
+    logging.debug(f"Endianness: {endianness}")
+    logging.debug(f"Architecture: {arch}")
 
-    # wordsize value changes depending on the architecture 
-    wordsize = 8 if "64" in endianness else 4 
-    word_fmt = '<I' if wordsize == 4 else '<Q'
+    # pointer_size value changes depending on the architecture 
+    arch = elf.elf_file.get_machine_arch()
+    if arch == "x86":
+        pointer_size = 4
+    elif arch == "x64":
+        pointer_size = 8
+    else:
+        print("Architecture not yet supported")
+        return(1)
+    pointer_format = '<I' if pointer_size == 4 else '<Q'
 
     # Extract pointers from the memory data
-    print("[*] Extracting pointers")
+    logging.debug("Extracting pointers")
     ptrs = {}
     for region, i in zip(elf.segments_intervals, range(len(elf.segments_intervals))):
         logging.debug(f"[ptr] Searching pointers in memory region {i}...")
         valid_pointers = []
         # get every memory region data
         mem_region_data = elf.elf_buf[region[2]:region[2]+region[3]]
-        valid_pointers.extend(ep.extract_pointers(elf.segments_intervals, mem_region_data, wordsize, word_fmt, (region[0], region[1]), region[0]))
+        valid_pointers.extend(extract_pointers(elf.segments_intervals, mem_region_data, pointer_size, pointer_format, (region[0], region[1]), region[0]))
         valid_pointers.sort()
         for pointer_address, target_address in valid_pointers:
             logging.debug(f"\t ptr at 0x{pointer_address:08X} -> 0x{target_address:08X}")
@@ -177,68 +209,74 @@ def main():
         logging.debug(f"[ptr] Found {len(valid_pointers)} pointers in memory region {i}.")
     # create reverse pointers dictionary
     rptr = {v: k for k, v in ptrs.items()}
-    print(f"[!] Found {len(ptrs)} pointers")
+    logging.debug(f"Found {len(ptrs)} pointers")
 
-    print("[*] Retrieving strings")
+    # ptrs = load_c(str(dest_path) + "/extracted_ptrs.lzma")
+    # rptr = load_c(str(dest_path) + "/extracted_rptrs.lzma")
+
+    logging.debug("Retrieving strings")
     strings = retrieve_strings(elf,endianness,rptr)
-    print(f"[!] Found {len(strings)} strings")
-    print("[*] Creating bitmap")
+    logging.debug(f"Found {len(strings)} strings")
+    logging.debug("Creating bitmap")
     bm = create_bitmap(elf)
 
-    ghidra_path = os.getenv("GHIDRA_PATH")
-    if not ghidra_path:
-        print("Error: GHIDRA_PATH not set!")
-        return(1)
-    # Collect addresses from static analysis
-    print("[*] Start Ghidra static analysis...")
-    out_filename = f"{str(dest_path)}.json"
-    processor = f"x86:LE:{wordsize * 8}:default -cspec gcc" if "x86" in arch or "386" in arch else f"AARCH64:LE:{wordsize * 8}:v8A -cspec default" # Support only X86 and AARCH64 
-    logging.debug(f"Ghidra Processor: {processor}")
-    ghidra_cmd = os.path.join(ghidra_path, 'support/analyzeHeadless') \
-                 + f" /tmp/ ghidra_project_{random.randint(0, 1000000)}" \
-                 + f" -import {str(dest_path)}/core.elf" \
-                 + f" -processor {processor}" \
-                 + f" -scriptPath {os.path.join(os.path.dirname(__file__),'ghidra')}" \
-                 + f" -postScript export_xrefs.py {out_filename}"
-    print(ghidra_cmd)
-    functions = []
-    logging.debug(f"Running Ghidra command: {ghidra_cmd}")
-    try:
-        ret = subprocess_check_output_strip(ghidra_cmd)
-        logging.debug(f"Ghidra output:\n{ret}")
-        with open(out_filename, "r") as output:
-            (xrefs_data, functions) = json.load(output)
-        # Filter for valid xrefs_only
-        print("[*] Static analysis ended, filtering results...")
-        if wordsize == 8:
-            convf = lambda x: ctypes.c_uint64(x).value
-        else:
-            convf = lambda x: ctypes.c_uint32(x).value
-        xrefs_data = [convf(x) for x in xrefs_data.values()]
-        xrefs_data = set(xrefs_data)
-        functions = [convf(x) for x in functions.values()]
-        functions = set(functions)
+    if args.cross_reference:
+        print("Cross reference enabled")
+        ghidra_path = os.getenv("GHIDRA_PATH")
+        if not ghidra_path:
+            print("Error: GHIDRA_PATH not set!")
+            return(1)
+        # Collect addresses from static analysis
+        logging.debug("Start Ghidra static analysis...")
+        out_filename = f"{str(dest_path)}.json"
+        processor = f"x86:LE:{pointer_size * 8}:default -cspec gcc" if "x86" in arch or "386" in arch else f"AARCH64:LE:{pointer_size * 8}:v8A -cspec default" # Support only X86 and AARCH64 
+        logging.debug(f"Ghidra Processor: {processor}")
+        ghidra_cmd = os.path.join(ghidra_path, 'support/analyzeHeadless') \
+                    + f" /tmp/ ghidra_project_{random.randint(0, 1000000)}" \
+                    + f" -import {str(dest_path)}/core.elf" \
+                    + f" -processor {processor}" \
+                    + f" -scriptPath {os.path.join(os.path.dirname(__file__),'ghidra')}" \
+                    + f" -postScript export_xrefs.py {out_filename}"
+        functions = []
+        logging.debug(f"Running Ghidra command: {ghidra_cmd}")
+        try:
+            ret = subprocess_check_output_strip(ghidra_cmd)
+            logging.debug(f"Ghidra output:\n{ret}")
+            with open(out_filename, "r") as output:
+                (xrefs_data, functions) = json.load(output)
+            # Filter for valid xrefs_only
+            logging.debug("Static analysis ended, filtering results...")
+            if pointer_size == 8:
+                convf = lambda x: ctypes.c_uint64(x).value
+            else:
+                convf = lambda x: ctypes.c_uint32(x).value
+            xrefs_data = [convf(x) for x in xrefs_data.values()]
+            xrefs_data = set(xrefs_data)
+            functions = [convf(x) for x in functions.values()]
+            functions = set(functions)
 
-        print(f"[!] Found {len(xrefs_data)} xrefs and {len(functions)} functions")
+            logging.debug(f"Found {len(xrefs_data)} xrefs and {len(functions)} functions")
 
-        #print(functions)
+            #print(functions)
 
-    except subprocess.CalledProcessError as e:
-        print("[!] Error in Ghidra static analysis!")
-        print(e)
-        xrefs_data = {}
+        except subprocess.CalledProcessError as e:
+            print("Error in Ghidra static analysis:")
+            print(e)
+            xrefs_data = {}
+
+        dump(xrefs_data, str(dest_path) + "/extracted_xrefs.lzma")
+        dump(functions, str(dest_path) + "/extracted_functions.lzma")
     
     # Save data structures
-    print("[*] Saving features")
+    logging.debug("Saving features")
     dump(elf.v2o, str(dest_path) + "/extracted_v2o.lzma")
     dump(elf.o2v, str(dest_path) + "/extracted_o2v.lzma")
     dump(strings, str(dest_path) + "/extracted_strs.lzma")
     dump(ptrs, str(dest_path) + "/extracted_ptrs.lzma")
     dump(rptr, str(dest_path) + "/extracted_rptrs.lzma")
     dump(bm, str(dest_path) + "/extracted_btm.lzma")
-    dump(xrefs_data, str(dest_path) + "/extracted_xrefs.lzma")
-    dump(functions, str(dest_path) + "/extracted_functions.lzma")
-    print("[*] Features saved.")
+
+    logging.debug("Features saved.")
 
 if __name__ == '__main__':
     main()

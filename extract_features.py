@@ -44,12 +44,10 @@ def main():
         return(1)
 
     # Load the ELF file and parse it
-    print("Load ELF...")
-    import time as t
-    #t.sleep(15)
+    print("Loading ELF...")
     phy_elf = ELFDump(args.dump_elf)
     
-    print("Get virtspace...")
+    print("Get address...")
     virtspace = get_virtspace(phy_elf, args.ignore_page)
 
     # Retrieve pointers, reverse-pointers, strings and memory bitmap and save them
@@ -60,7 +58,6 @@ def main():
     virtspace.create_bitmap()
 
     # Produce a kernel VAS only ELF file
-    print("Export kernel VAS ELF...")
     virtspace.export_virtual_memory_elf(str(dest_path) + "/extracted_kernel.elf", False, False)
     ghidra_path = os.getenv("GHIDRA_PATH")
     if not ghidra_path:
@@ -70,7 +67,7 @@ def main():
     print("Start static analysis...")
     out_filename = f"{str(dest_path)}.json"
     arch = phy_elf.get_machine_data()["Architecture"]
-    print (f"Architecture: {arch}")
+    logging.debug(f"Detected architecture: {arch}")
     processor = f"x86:LE:{virtspace.wordsize * 8}:default -cspec gcc" if "X86" in arch or "386" in arch else f"AARCH64:LE:{virtspace.wordsize * 8}:v8A -cspec default" # Support only X86 and AARCH64 
     ghidra_cmd = os.path.join(ghidra_path, 'support/analyzeHeadless') \
                  + f" /tmp/ ghidra_project_{random.randint(0, 1000000)}" \
@@ -78,10 +75,11 @@ def main():
                  + f" -processor {processor}" \
                  + f" -scriptPath {os.path.join(os.path.dirname(__file__),'ghidra')}" \
                  + f" -postScript export_xrefs.py {out_filename}"
-    print(ghidra_cmd)
+    logging.debug(f"Ghidra command used: {ghidra_cmd}")
     functions = []
     try:
         ret = subprocess_check_output_strip(ghidra_cmd)
+        logging.debug(ret)
         with open(out_filename, "r") as output:
             (xrefs_data, functions) = json.load(output)
 
@@ -97,7 +95,7 @@ def main():
         functions = set(functions)
 
     except subprocess.CalledProcessError as e:
-        print("[!] Error in static analysis!")
+        print("Error in static analysis!")
         print(e)
         xrefs_data = {}
     
@@ -112,6 +110,7 @@ def main():
     # dump(virtspace.packets if args.ip or args.mac else [], str(dest_path) + "_pkts.lzma")
     dump(xrefs_data, str(dest_path) + "/extracted_xrefs.lzma")
     dump(functions, str(dest_path) + "/extracted_functions.lzma")
+    print("Done")
 
 if __name__ == '__main__':
     main()

@@ -90,35 +90,37 @@ def extract_pointers(segments, memory_region, pointer_size, pointer_format, vali
         # check if pointer is aligned
         if i % pointer_size != 0:
             continue
+
         
         # Unpack the chunk into an integer (pointer) using little-endian format
         pointer_value = struct.unpack(pointer_format, chunk)[0]
 
         for start, end, _, _ in segments:
             if start <= pointer_value <= end:        
-                valid_pointers.append((offset + i, pointer_value))
+                if valid_offset[0] <= pointer_value <= valid_offset[1]:
+                    valid_pointers.append((offset + i, pointer_value))
     return valid_pointers
 
 def save_pointers(segments_intervals:list, pointer_size:int, pointer_format:str, memory_data:bytes):
     ptrs = {}
     for region, i in zip(segments_intervals, range(len(segments_intervals))):
-        print(f"[+] Searching pointers in memory region {i}...")
+        # print(f"[+] Searching pointers in memory region {i}...")
         valid_pointers = []
         # print(" start addr: \t" + hex(region[0]) + "\n",\
         #       "end addr:\t"   + hex(region[1]) + "\n",\
         #       "file offset:\t" + hex(region[2]) + "\n",\
         #       "file size:\t"   + hex(region[3]))
         # print("")
-        # print(memory_data[region[2]:region[2]+region[3]])
+        print(memory_data[region[2]:region[2]+region[3]])
         mem_region_data = memory_data[region[2]:region[2]+region[3]]
         valid_pointers.extend(extract_pointers(segments_intervals, mem_region_data, pointer_size, pointer_format, (region[0], region[1]), region[0]))
         valid_pointers.sort()
         n_ptrs = 0
         for pointer_address, target_address in valid_pointers:
             n_ptrs += 1
-            print(f"\t ptr at 0x{pointer_address:08X} -> 0x{target_address:08X}")
+            #print(f"\t ptr at 0x{pointer_address:08X} -> 0x{target_address:08X}")
             ptrs[pointer_address] = target_address
-        print(f"[+] Found {n_ptrs} pointers in memory region {i}.")
+        #print(f"[+] Found {n_ptrs} pointers in memory region {i}.")
     #revertse pointers
     rptrs = {v: k for k, v in ptrs.items()}
     return ptrs,rptrs
@@ -160,6 +162,7 @@ def main():
     print(f"[+] Found {len(ptrs)} pointers in total.")
     print(f"[+] Saving extracted pointers to {str(dest_path)}/extracted_ptrs.lzma")
     dump(ptrs, str(dest_path) + "/extracted_ptrs.lzma") 
+    dump(rptrs, str(dest_path) + "/extracted_rptrs.lzma")
     print("[+] Done.")
     return ptrs,rptrs
 

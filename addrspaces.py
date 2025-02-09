@@ -228,18 +228,6 @@ class ELFDump:
                     self.segments_intervals.append((r_start, r_end, p_offset, segm["p_filesz"]))
                     self.v2o_list.append((r_start, (r_end, p_offset)))
                     self.o2v_list.append((p_offset, (p_offset + (r_end - r_start), r_start)))
-        
-        # Debug
-        # self.p2o_list = p2o_list
-        # self.o2p_list = o2p_list
-        # self.p2mmd_list = p2mmd_list
-
-        # Compact intervals
-
-        # print("v2o_list")
-        # print([(hex(x[0]), (hex(x[1][0]),hex(x[1][1]))) for x in self.v2o_list])
-        # print("o2v_list")
-        # print([(hex(x[0]), (hex(x[1][0]),hex(x[1][1]))) for x in self.o2v_list])
 
         self.v2o_list = self._compact_intervals(self.v2o_list)
         self.o2v_list = self._compact_intervals(self.o2v_list)
@@ -247,51 +235,7 @@ class ELFDump:
         self.o2v = IMOffsets(*list(zip(*self.o2v_list)))
         self.v2o = IMOffsets(*list(zip(*self.v2o_list)))
 
-        for limit, result in self.o2v.get_values():
-            print(f"Limit: {limit}, Result: {result}")
-        """
-        intervals = []
-        for pmask, mapping_p in mapping.items():
-            if pmask[0] == 0: # or (pmask[0] != 0 and pmask[1] != 0): # Ignore user accessible pages
-                continue
-            intervals.extend([(x[0], x[0]+x[1], x[2], pmask) for x in mapping_p if not x[3]]) # Ignore MMD
-        intervals.sort()
-        """
-        # logging.debug("o2v pre:")
-        # for offset in self.o2v.get_values():
-        #     logging.debug((hex(offset[0]),(hex(offset[1][0]),hex(offset[1][1]))))
-
-
-        # # TODO: refactor this...
-        # newo2pvalues = []
-        # newo2pkeys = []
-        # for i in tuple(self.o2v.get_values()):
-        #     newo2pvalues.append(i[1][1])
-        #     newo2pkeys.append(i[0])
-
-        # newo2p = {}
-        # for i in range(len(newo2pvalues)):
-        #     newo2p[newo2pkeys[i]] = [newo2pvalues[i]]
-
-        # result = []
-        # keys = list(newo2p.keys())
-        
-        # for i in range(len(keys)):
-        #     key1 = keys[i]
-        #     key2 = keys[i + 1]
-        #     value = newo2p[key1]
-        #     result.append((key1, key2, tuple(value)))
-
-        
-        # intervals = []
-        # for i in self.v2o.get_values():
-        #     intervals.extend([(i[0], i[1][0] , tuple([i[1][1]]))])
-        # intervals.sort()    
-
-        # logging.debug([(hex(i[0]),hex(i[1]),hex(i[2][0])) for i in intervals])
-
-        # self.o2v = IMOverlapping(intervals)
-
+        #adapt the o2v to the new format
         newo2v = {i[0]: [i[1][1]] for i in self.o2v.get_values()}
         keys = list(newo2v.keys())
 

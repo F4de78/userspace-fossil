@@ -116,7 +116,7 @@ class PyBDHStack:
 try:
     from cython_bdhash import BDHash, BDHStack
 except ImportError:
-    logging.warn("Cython-compiled version of bdhash not available, compile with `python setup.py build_ext --inplace`")
+    logging.warning("Cython-compiled version of bdhash not available, compile with `python setup.py build_ext --inplace`")
     BDHash, BDHStack = PyBDHash, PyBDHStack
 
 

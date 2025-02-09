@@ -108,8 +108,13 @@ def non_unique_in_first(arrays):
     first, *others = arrays
     mask = np.concatenate([[False], first[:-1] == first[1:], [False]])
     non_unique = mask[:-1] | mask[1:]
+    print(non_unique.shape)
+    if non_unique.shape <= (1,):
+        first = first[non_unique[0]]
+        return get_boundaries(first), itertools.chain([first], (a[non_unique[0]] for a in others))
     first = first[non_unique]
     return get_boundaries(first), itertools.chain([first], (a[non_unique] for a in others))
+    
 
 
 def tree_distance_threshold(o0, o1, o2t):

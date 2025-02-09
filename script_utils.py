@@ -44,8 +44,9 @@ def fmt_percentage(ratio, fixed_width=False):
 
 def compute_pointer_set(args):
     pointer_set = PointerSet(compress_pickle.load(args.pointers))
+    print(f"-- {len(pointer_set):,} pointers")
     aligned_src, aligned_dst = pointer_set.aligned_ratio()
-    logging.info(f"{len(pointer_set):,} pointers [{fmt_percentage(aligned_src)} sources "
+    print(f"{len(pointer_set):,} pointers [{fmt_percentage(aligned_src)} sources "
                  f"and {fmt_percentage(aligned_dst)} destinations aligned]")
     return pointer_set
 
