@@ -94,7 +94,7 @@ def find_ptrs_arrays(ptrs):
         diff_keys_groups = np.split(keys, np.where(np.diff(keys) != ptr_size)[0]+1)
 
         for group in tqdm(diff_keys_groups):
-            if len(group) < 3:
+            if len(group) < args.min_len_ptrs_array:
                 continue
             
             group = [convf(i) for i in group] # numpy :/
@@ -165,7 +165,7 @@ def find_lists(xref):
             ptr_list.append(current_ptr)
             ptr_set.add(current_ptr)
 
-        if len(ptr_list) >= 3:
+        if len(ptr_list) >= args.min_len_ll:
             ll = LinkedList(ptr_list, (offset,), loop)
             ll.determine_shape()
             ll.find_strings()
@@ -249,14 +249,20 @@ def main():
     global ptrs_keysa
     global already_assigned
     global top_offset
+    global args
 
     parser = argparse.ArgumentParser()
     parser.add_argument('data_dir', type=str, help='Dataset directory')
     parser.add_argument('dump_name', type=str, help='Name of the meomry dump')
     parser.add_argument("-max_size", type=int, default=8192, help="Maximum structure size")
     parser.add_argument("-debug", action="store_true", default=False)
+    parser.add_argument('-min_len_ll', type=int, default=3, help="Set the minimum lenght for a linked list to be extracted")
+    parser.add_argument('-min_len_ptrs_array', type=int, default=3, help="Set the minimum lenght for arrays to be extracted")
     parser.add_argument('--cross_reference', '-xref', help="Enable search for cross reference", default=False, action="store_true")
+
+    
     args = parser.parse_args()
+
 
     # Brutal, based on extension
     print("Determine CPU features...")
