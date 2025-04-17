@@ -126,7 +126,7 @@ def determine_unique_cicles(sibling_list, threshold=0.9):
     return unique_structs
 
 def shape_string(x):
-    x.determine_shape(max_offset = 1024, fake=False)
+    x.determine_shape(max_offset = max_size, fake=fake_shape)
     x.find_strings()
     # x.find_timestamps() 
     # x.find_ips()  
@@ -134,7 +134,7 @@ def shape_string(x):
 
 def characterize_list(x):
     x = LinkedList(list(x), (0,), False)
-    x.determine_shape(max_offset = 1024, fake=False)
+    x.determine_shape(max_offset = max_size, fake=fake_shape)
     x.find_strings()
     # x.find_timestamps() 
     # x.find_ips()  
@@ -167,7 +167,7 @@ def find_lists(xref):
 
         if len(ptr_list) >= args.min_len_ll:
             ll = LinkedList(ptr_list, (offset,), loop)
-            ll.determine_shape()
+            ll.determine_shape(fake=fake_shape)
             ll.find_strings()
             # ll.find_ips()  
             if ll.embedded_strs.values() or ll.pointed_strs.values():
@@ -232,7 +232,7 @@ def derive_structs(x: PointersGroup):
         s = PointersGroup(ptrs)
         s.parent = x
 
-        s.determine_shape(max_size, fake=False)
+        s.determine_shape(max_size, fake=fake_shape)
         s.find_strings()
         # x.find_timestamps()
         # x.find_ips()
@@ -249,6 +249,7 @@ def main():
     global ptrs_keysa
     global already_assigned
     global top_offset
+    global fake_shape
     global args
 
     parser = argparse.ArgumentParser()
@@ -259,6 +260,7 @@ def main():
     parser.add_argument('-min_len_ll', type=int, default=3, help="Set the minimum lenght for a linked list to be extracted")
     parser.add_argument('-min_len_ptrs_array', type=int, default=3, help="Set the minimum lenght for arrays to be extracted")
     parser.add_argument('--cross_reference', '-xref', help="Enable search for cross reference", default=False, action="store_true")
+    parser.add_argument('--fake_shape', '-f', help="Don't estimate the correct shape size, but take a fixed shape for every node", default=False, action="store_true")
 
     
     args = parser.parse_args()
@@ -284,6 +286,8 @@ def main():
 
     if args.max_size:
         max_size = args.max_size
+
+    fake_shape = args.fake_shape
 
     # Load datafiles
     print("Load data files...")
